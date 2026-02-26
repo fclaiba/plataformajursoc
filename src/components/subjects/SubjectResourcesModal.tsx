@@ -26,9 +26,7 @@ export function SubjectResourcesModal({ isOpen, onClose, materia }: SubjectResou
     if (!materia) return null;
 
     // Generate Dynamic Resources based on Subject Name to simulate real data
-    const getResources = (type: 'biblio' | 'apuntes' | 'resumenes') => {
-        const titlePrefix = materia.nombre.split(' ')[0]; // First word for shorter titles
-
+    const getResources = (type: 'biblio' | 'apuntes' | 'resumenes'): Resource[] => {
         switch (type) {
             case 'biblio':
                 return [

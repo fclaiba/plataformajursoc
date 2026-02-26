@@ -19,7 +19,7 @@ export function ProfilePage() {
     const documents = user.documents || [];
 
     const handleUploadComplete = (file: File) => {
-        addDocument(file);
+        addDocument(file.name);
     };
 
     return (
