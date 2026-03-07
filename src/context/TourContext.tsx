@@ -65,6 +65,15 @@ export const TourProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                 },
                 {
+                    element: '#tour-dashboard',
+                    popover: {
+                        title: 'Dashboard',
+                        description: 'Este acceso te devuelve al panel principal con el resumen de tu actividad y accesos rápidos.',
+                        side: "bottom",
+                        align: 'center'
+                    }
+                },
+                {
                     element: '#tour-mis-materias',
                     popover: {
                         title: 'Mis Materias',
@@ -87,6 +96,15 @@ export const TourProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     popover: {
                         title: 'Mapa de Correlativas',
                         description: 'Visualiza el plan de estudios y cómo se conectan las materias entre sí. Ideal para planificar tu carrera.',
+                        side: "bottom",
+                        align: 'center'
+                    }
+                },
+                {
+                    element: '#tour-ranking',
+                    popover: {
+                        title: 'Ranking Docente',
+                        description: 'Desde aquí puedes votar y consultar el ranking de docentes por materia y cátedra.',
                         side: "bottom",
                         align: 'center'
                     }

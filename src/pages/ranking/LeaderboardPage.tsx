@@ -100,23 +100,34 @@ export function LeaderboardPage() {
     };
 
     const hasActiveFilters = selectedMateriaId !== 'all' || selectedCatedraId !== 'all' || selectedRole !== 'all' || searchTerm !== '';
+    const getRankBadgeClasses = (index: number) => {
+        if (!hasActiveFilters && index === 0) return 'bg-amber-100 text-amber-700 ring-2 ring-amber-200';
+        if (!hasActiveFilters && index === 1) return 'bg-slate-200 text-slate-700';
+        if (!hasActiveFilters && index === 2) return 'bg-orange-100 text-orange-700';
+        return 'bg-slate-100 text-slate-500';
+    };
 
     return (
-        <div className="max-w-5xl mx-auto py-8 animate-in fade-in duration-700 px-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" onClick={() => navigate('/ranking/vote')} className="text-slate-500">
-                        <ArrowLeft className="w-4 h-4 mr-2" /> Votar
-                    </Button>
-                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-yellow-500 flex items-center">
-                        <Trophy className="w-8 h-8 text-amber-500 mr-3" />
+        <div className="max-w-5xl mx-auto py-6 md:py-8 animate-in fade-in duration-700 px-3 sm:px-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-yellow-500 flex items-center">
+                        <Trophy className="w-7 h-7 md:w-8 md:h-8 text-amber-500 mr-3" />
                         Ranking de Docentes
                     </h1>
+                    <p className="text-sm md:text-base text-slate-500 mt-1">
+                        Consultá posiciones y rendimiento por materia, cátedra y rol.
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <Button variant="ghost" onClick={() => navigate('/ranking/vote')} className="text-slate-600">
+                        <ArrowLeft className="w-4 h-4 mr-2" /> Volver a votar
+                    </Button>
                 </div>
             </div>
 
             {/* Filters Section */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 space-y-4">
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm mb-6 space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                         <Filter className="w-4 h-4" /> Filtros
@@ -128,13 +139,13 @@ export function LeaderboardPage() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     {/* Search */}
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <Input
                             placeholder="Buscar docente..."
-                            className="pl-9 bg-slate-50 border-slate-200"
+                            className="pl-9 bg-slate-50 border-slate-200 h-10"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -143,7 +154,7 @@ export function LeaderboardPage() {
                     {/* Materia Select */}
                     <div>
                         <select
-                            className="w-full h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full h-10 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             value={selectedMateriaId}
                             onChange={handleMateriaChange}
                         >
@@ -157,7 +168,7 @@ export function LeaderboardPage() {
                     {/* Catedra Select - Dependent */}
                     <div>
                         <select
-                            className="w-full h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                            className="w-full h-10 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                             value={selectedCatedraId}
                             onChange={(e) => setSelectedCatedraId(e.target.value)}
                             disabled={selectedMateriaId === 'all'}
@@ -172,7 +183,7 @@ export function LeaderboardPage() {
                     {/* Role Select */}
                     <div>
                         <select
-                            className="w-full h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full h-10 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             value={selectedRole}
                             onChange={(e) => setSelectedRole(e.target.value)}
                         >
@@ -186,7 +197,7 @@ export function LeaderboardPage() {
                 </div>
             </div>
 
-            <Card className="shadow-xl border-slate-200 overflow-hidden">
+            <Card className="shadow-xl border-slate-200 overflow-hidden rounded-2xl">
                 <CardHeader className="bg-slate-50 border-b border-slate-100 flex flex-row items-center justify-between">
                     <CardTitle className="text-lg text-slate-700 flex items-center gap-2">
                         {currentContextLabel}
@@ -212,54 +223,52 @@ export function LeaderboardPage() {
                                     <div
                                         key={p.id}
                                         className={cn(
-                                            "flex items-center p-4 hover:bg-slate-50 transition-colors",
-                                            index < 3 && !hasActiveFilters ? "bg-gradient-to-r from-white" : "", // Highlight top 3 only on global list
+                                            "p-4 sm:p-5 hover:bg-slate-50 transition-colors",
+                                            index < 3 && !hasActiveFilters ? "bg-gradient-to-r from-white" : "",
                                             !hasActiveFilters && index === 0 ? "to-amber-50" : !hasActiveFilters && index === 1 ? "to-slate-50" : !hasActiveFilters && index === 2 ? "to-orange-50" : ""
                                         )}
                                     >
-                                        {/* Rank */}
-                                        <div className="w-16 flex-shrink-0 flex justify-center">
-                                            {!hasActiveFilters && index === 0 ? (
-                                                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-black shadow-sm ring-2 ring-amber-200">1</div>
-                                            ) : !hasActiveFilters && index === 1 ? (
-                                                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold">2</div>
-                                            ) : !hasActiveFilters && index === 2 ? (
-                                                <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-700 font-bold">3</div>
-                                            ) : (
-                                                <span className="text-slate-400 font-mono font-bold text-lg">#{index + 1}</span>
-                                            )}
-                                        </div>
-
-                                        {/* Avatar */}
-                                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-lg font-bold text-slate-500 mr-4 border border-slate-200 shadow-sm flex-shrink-0">
-                                            {p.name.charAt(0)}
-                                        </div>
-
-                                        {/* Info */}
-                                        <div className="flex-1 min-w-0 mr-4">
-                                            <h3 className="font-bold text-slate-800 truncate flex items-center gap-2">
-                                                {p.name}
-                                                {p.roles?.map(r => (
-                                                    <span key={r} className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 uppercase tracking-wider font-bold">
-                                                        {r}
-                                                    </span>
-                                                ))}
-                                            </h3>
-                                            <p className="text-xs text-slate-500 truncate mt-1">
-                                                {p.subjects.slice(0, 3).join(', ')}
-                                            </p>
-                                        </div>
-
-                                        {/* Stats */}
-                                        <div className="text-right flex items-center gap-6">
-                                            <div className="hidden sm:block text-center w-20">
-                                                <div className="text-xs text-slate-400 uppercase font-bold">Votos</div>
-                                                <div className="text-sm font-semibold text-slate-600">{stats.matches}</div>
+                                        <div className="flex items-start gap-3 sm:gap-4">
+                                            {/* Rank */}
+                                            <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full font-bold text-sm shadow-sm mt-1">
+                                                <span className={cn("w-9 h-9 rounded-full flex items-center justify-center", getRankBadgeClasses(index))}>
+                                                    {index + 1}
+                                                </span>
                                             </div>
-                                            <div className="w-24 text-right">
-                                                <div className="text-2xl font-black text-indigo-600 flex items-center justify-end gap-1">
-                                                    {stats.elo}
-                                                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider relative -top-1">ELO</span>
+
+                                            {/* Avatar */}
+                                            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-slate-100 flex items-center justify-center text-base sm:text-lg font-bold text-slate-500 border border-slate-200 shadow-sm flex-shrink-0">
+                                                {p.name.charAt(0)}
+                                            </div>
+
+                                            <div className="flex-1 min-w-0">
+                                                {/* Info */}
+                                                <h3 className="font-bold text-slate-800 truncate flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                                                    {p.name}
+                                                    {p.roles?.map(r => (
+                                                        <span key={r} className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 uppercase tracking-wider font-bold">
+                                                            {r}
+                                                        </span>
+                                                    ))}
+                                                </h3>
+                                                <p className="text-xs text-slate-500 truncate mt-1">
+                                                    {p.subjects.slice(0, 3).join(', ')}
+                                                </p>
+
+                                                {/* Stats */}
+                                                <div className="mt-3 flex items-end justify-between gap-3">
+                                                    <div className="text-left">
+                                                        <div className="text-[11px] text-slate-400 uppercase font-bold">Votos</div>
+                                                        <div className="text-sm font-semibold text-slate-600">{stats.matches}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-xl sm:text-2xl font-black text-indigo-600 leading-none">
+                                                            {stats.elo}
+                                                        </div>
+                                                        <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                                            ELO
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

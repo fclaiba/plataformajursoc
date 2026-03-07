@@ -36,11 +36,11 @@ export function CreateRequestPage() {
 
     // Mock logic to get current commission for a subject
     const currentCommission = useMemo(() => {
-        if (!originMateriaId) return null;
-        // Mock: Find ANY commission for this subject to act as the "Current" one
-        // In a real app, this would come from user.enrollments
-        return COMISIONES.find(c => c.materiaId === originMateriaId) || null;
-    }, [originMateriaId]);
+        if (!originMateriaId || !user) return null;
+        const myEnrollment = user.enrollments?.find((enrollment) => enrollment.materiaId === originMateriaId);
+        if (!myEnrollment) return null;
+        return COMISIONES.find((commission) => commission.id === myEnrollment.comisionId) || null;
+    }, [originMateriaId, user]);
 
     // Available commissions logic with SIMULATION
     const availableDestinations = useMemo(() => {
@@ -373,7 +373,7 @@ export function CreateRequestPage() {
             </div>
 
             {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 z-[100] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+            <div className="sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] rounded-t-2xl">
                 <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <div className="text-sm text-slate-500 hidden md:block">
                         Paso {step + 1} de 3

@@ -5,42 +5,74 @@ export interface Notification {
     title: string;
     message: string;
     type: 'info' | 'success' | 'warning' | 'error';
+    source?: 'auth' | 'requests' | 'chat' | 'ranking' | 'system';
     read: boolean;
     createdAt: Date;
 }
 
 interface NotificationsContextType {
     notifications: Notification[];
-    addNotification: (title: string, message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+    addNotification: (title: string, message: string, type?: 'info' | 'success' | 'warning' | 'error', source?: Notification['source']) => void;
     markAsRead: (id: string) => void;
+    clearAll: () => void;
     unreadCount: number;
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
+const NOTIFICATIONS_STORAGE_KEY = 'app-permutas-notifications-v1';
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [notifications, setNotifications] = useState<Notification[]>(() => {
+        const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw) as Array<Notification & { createdAt: string }>;
+            return parsed.map((notification) => ({ ...notification, createdAt: new Date(notification.createdAt) }));
+        } catch {
+            return [];
+        }
+    });
 
-    const addNotification = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    const persistNotifications = (updater: (current: Notification[]) => Notification[]) => {
+        setNotifications((prev) => {
+            const next = updater(prev);
+            localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(next));
+            return next;
+        });
+    };
+
+    const addNotification = (
+        title: string,
+        message: string,
+        type: 'info' | 'success' | 'warning' | 'error' = 'info',
+        source: Notification['source'] = 'system'
+    ) => {
         const newNotification: Notification = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: crypto.randomUUID(),
             title,
             message,
             type,
+            source,
             read: false,
             createdAt: new Date(),
         };
-        setNotifications(prev => [newNotification, ...prev]);
+        persistNotifications((current) => [newNotification, ...current]);
     };
 
     const markAsRead = (id: string) => {
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+        persistNotifications((current) => current.map((notification) => (
+            notification.id === id ? { ...notification, read: true } : notification
+        )));
+    };
+
+    const clearAll = () => {
+        persistNotifications(() => []);
     };
 
     const unreadCount = notifications.filter(n => !n.read).length;
 
     return (
-        <NotificationsContext.Provider value={{ notifications, addNotification, markAsRead, unreadCount }}>
+        <NotificationsContext.Provider value={{ notifications, addNotification, markAsRead, clearAll, unreadCount }}>
             {children}
         </NotificationsContext.Provider>
     );

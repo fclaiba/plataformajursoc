@@ -1,73 +1,67 @@
-# React + TypeScript + Vite
+# App Permutas - Plataforma JurSoc
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicacion web para estudiantes de la Facultad de Ciencias Juridicas y Sociales enfocada en:
+- gestion de materias y comisiones,
+- solicitudes de permuta con matching por prioridades,
+- chat y notificaciones entre estudiantes,
+- ranking docente y mapa de correlativas.
 
-Currently, two official plugins are available:
+## Scripts
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- `npm run dev`: desarrollo local.
+- `npm run build`: compilacion TypeScript + bundle Vite.
+- `npm run lint`: analisis estatico.
+- `npm run test`: tests unitarios (Vitest).
+- `npm run test:e2e`: smoke e2e (Playwright).
+- `npm run preview`: preview del build.
+- `npm run convex:dev`: levantar funciones Convex en desarrollo.
+- `npm run convex:deploy`: deploy de funciones Convex.
 
-## React Compiler
+## Arquitectura (frontend + Convex)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `src/context/`: estado de dominio por modulo (`Auth`, `Requests`, `Chat`, `Notifications`, `Professors`, `Tour`).
+- `src/pages/`: pantallas de producto.
+- `src/components/`: componentes reutilizables y modales de flujo.
+- `src/domain/`: reglas puras de negocio testeables (`requestMatching`, `scheduleRules`).
+- `src/data/`: semillas y datos mock actuales.
+- `src/convex/`: proveedor y wiring del cliente Convex.
+- `convex/`: schema y funciones backend (`users`, `subjects`, `requests`, `matches`, `chat`, `notifications`, `reviews`, `ranking`).
 
-## Expanding the ESLint configuration
+## Variables de entorno
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- `VITE_CONVEX_URL`: URL del deployment Convex.
+- `VITE_USE_CONVEX`: bandera de migración gradual (`true/false`).
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Sprint 0 - Setup Convex (dev/prod)
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+1. Ejecutar `npm run convex:dev` y seguir el wizard para enlazar el proyecto local.
+2. Confirmar que `convex/` contiene `schema.ts`, `auth.ts`, `http.ts` y módulos de dominio.
+3. Configurar `VITE_CONVEX_URL` con tu deployment de desarrollo.
+4. Verificar conectividad frontend: en el footer debe verse `Convex: online` cuando `VITE_USE_CONVEX=true`.
+5. Para producción, ejecutar `npm run convex:deploy` en pipeline o manualmente con credenciales de Convex.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Comandos de validación:
+- `npm run convex:check` (estructura Convex y typecheck si hay `CONVEX_DEPLOYMENT`).
+- `npm run test`
+- `npm run build`
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Flujo funcional principal
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+1. Usuario se registra o inicia sesion.
+2. Registra materias/comision con validaciones (cupo + conflictos horarios).
+3. Crea solicitud de permuta con prioridades.
+4. Motor de matching busca reciprocidad y marca solicitudes compatibles.
+5. Ambas partes coordinan por chat y confirman intercambio.
+6. Se cierra la permuta y se registra reseña.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Criterios minimos de release
+
+- Build y lint en verde.
+- Tests unitarios en verde para reglas de negocio core.
+- Sin bypass de autenticacion.
+- Solicitudes con estados consistentes (`PENDING`, `MATCHED`, `CONFIRMED`, `COMPLETED`, `CANCELLED`).
+- Persistencia local consistente para sesion, solicitudes, chat y notificaciones.
+
+## Roadmap estratégico
+
+Consultar `docs/sprints/roadmap-convex.md` para el plan completo por sprints (S0-S8), y `docs/release/` para runbook/checklist de salida.

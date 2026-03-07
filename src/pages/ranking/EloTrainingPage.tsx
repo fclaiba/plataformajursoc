@@ -23,6 +23,7 @@ export function EloTrainingPage() {
     const [loading, setLoading] = useState(true);
     const [animating, setAnimating] = useState(false);
     const [lastWinnerId, setLastWinnerId] = useState<string | null>(null);
+    const [voteError, setVoteError] = useState<string | null>(null);
 
     // Derived Data
     const filteredCatedras = useMemo(() => {
@@ -47,7 +48,9 @@ export function EloTrainingPage() {
         setLoading(true);
         // Small delay to allow UI to settle if changing modes roughly
         setTimeout(() => {
-            const filters: any = { role: selectedRole !== 'all' ? selectedRole : undefined };
+            const filters: { role?: string; subjectId?: string; catedraId?: string } = {
+                role: selectedRole !== 'all' ? selectedRole : undefined
+            };
 
             if (votingMode === 'subject') filters.subjectId = selectedSubjectId;
             if (votingMode === 'catedra') filters.catedraId = selectedCatedraId;
@@ -67,6 +70,7 @@ export function EloTrainingPage() {
         if (animating) return;
         setAnimating(true);
         setLastWinnerId(winner.id);
+        setVoteError(null);
 
         // Determine Context ID
         let contextId = 'general';
@@ -74,7 +78,13 @@ export function EloTrainingPage() {
         if (votingMode === 'catedra') contextId = selectedCatedraId;
 
         // Execute Vote
-        vote(winner.id, loser.id, { type: votingMode, id: contextId });
+        const result = vote(winner.id, loser.id, { type: votingMode, id: contextId });
+        if (!result.ok) {
+            setAnimating(false);
+            setLastWinnerId(null);
+            setVoteError(result.reason || 'No se pudo registrar tu voto.');
+            return;
+        }
 
         // Animation Delay for next pair
         setTimeout(() => {
@@ -98,7 +108,7 @@ export function EloTrainingPage() {
     };
 
     return (
-        <div className="max-w-6xl mx-auto py-4 md:py-8 px-4 animate-in fade-in duration-700">
+        <div className="max-w-6xl mx-auto py-4 md:py-8 px-3 sm:px-4 animate-in fade-in duration-700">
             {/* Header */}
             <div className="text-center mb-6 md:mb-10 space-y-3 md:space-y-4">
                 <div className="inline-flex items-center justify-center p-2 md:p-3 bg-indigo-100 rounded-full mb-2">
@@ -107,38 +117,53 @@ export function EloTrainingPage() {
                 <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
                     Ranking Docente
                 </h1>
+                <p className="text-sm md:text-base text-slate-500 max-w-2xl mx-auto">
+                    Elegí entre dos docentes para mejorar el ranking. Cuantos más votos, más preciso el ELO.
+                </p>
 
-                <div className="flex justify-center gap-4 mt-2">
-                    <Button variant="outline" onClick={() => navigate('/ranking/leaderboard')} className="gap-2 text-xs md:text-sm h-8 md:h-10">
+                <div className="flex justify-center gap-3 mt-2 flex-wrap">
+                    <Button variant="outline" onClick={() => navigate('/ranking/leaderboard')} className="gap-2 text-xs md:text-sm h-9 md:h-10">
                         <Trophy className="w-3 h-3 md:w-4 md:h-4 text-amber-500" /> Ver Tabla
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        className="text-xs md:text-sm h-9 md:h-10"
+                        onClick={() => {
+                            setVotingMode('general');
+                            setSelectedSubjectId('all');
+                            setSelectedCatedraId('all');
+                            setSelectedRole('all');
+                        }}
+                    >
+                        Limpiar filtros
                     </Button>
                 </div>
 
                 {/* Context Selector Panel */}
-                <div className="max-w-3xl mx-auto mt-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex flex-col md:flex-row gap-4 items-center justify-center">
+                <div className="max-w-4xl mx-auto mt-6 bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <div className="flex flex-col gap-4">
 
                         {/* Mode Tabs */}
-                        <div className="flex p-1 bg-slate-100 rounded-lg">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1 bg-slate-100 rounded-xl">
                             <button
                                 onClick={() => { setVotingMode('general'); setSelectedSubjectId('all'); setSelectedCatedraId('all'); }}
-                                className={cn("px-4 py-2 rounded-md text-sm font-medium transition-all", votingMode === 'general' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                                className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold transition-all", votingMode === 'general' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
                             >General</button>
                             <button
                                 onClick={() => { setVotingMode('subject'); setSelectedSubjectId('all'); }}
-                                className={cn("px-4 py-2 rounded-md text-sm font-medium transition-all", votingMode === 'subject' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                                className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold transition-all", votingMode === 'subject' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
                             >Por Materia</button>
                             <button
                                 onClick={() => { setVotingMode('catedra'); setSelectedSubjectId('all'); setSelectedCatedraId('all'); }}
-                                className={cn("px-4 py-2 rounded-md text-sm font-medium transition-all", votingMode === 'catedra' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                                className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold transition-all", votingMode === 'catedra' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
                             >Por Cátedra</button>
                         </div>
 
                         {/* Filters based on Mode */}
-                        <div className="flex flex-1 gap-2 w-full md:w-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 w-full">
                             {(votingMode === 'subject' || votingMode === 'catedra') && (
                                 <select
-                                    className="h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1"
+                                    className="h-10 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     value={selectedSubjectId}
                                     onChange={handleSubjectChange}
                                 >
@@ -149,7 +174,7 @@ export function EloTrainingPage() {
 
                             {votingMode === 'catedra' && (
                                 <select
-                                    className="h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 disabled:opacity-50"
+                                    className="h-10 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                                     value={selectedCatedraId}
                                     onChange={(e) => setSelectedCatedraId(e.target.value)}
                                     disabled={selectedSubjectId === 'all'}
@@ -161,9 +186,9 @@ export function EloTrainingPage() {
                         </div>
 
                         {/* Role Filter (Always Available) */}
-                        <div className="w-full md:w-auto">
+                        <div className={cn("w-full", votingMode === 'general' ? "md:max-w-xs md:mx-auto" : "")}>
                             <select
-                                className="w-full md:w-32 h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                className="w-full h-10 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 value={selectedRole}
                                 onChange={(e) => setSelectedRole(e.target.value)}
                             >
@@ -177,7 +202,7 @@ export function EloTrainingPage() {
                     </div>
                 </div>
 
-                <p className="text-slate-600 text-lg font-medium max-w-2xl mx-auto px-4 mt-6 animate-in slide-in-from-bottom-2 fade-in duration-300 min-h-[3rem] flex items-center justify-center">
+                <p className="text-slate-600 text-base md:text-lg font-medium max-w-2xl mx-auto px-4 mt-6 animate-in slide-in-from-bottom-2 fade-in duration-300 min-h-[3rem] flex items-center justify-center">
                     {votingMode === 'general' ? "¿Quién es mejor docente en general?" :
                         votingMode === 'subject' ? "¿Quién es mejor para esta materia?" :
                             "¿Quién es mejor en esta cátedra?"}
@@ -186,13 +211,13 @@ export function EloTrainingPage() {
 
             {/* Content Area */}
             {!isContextReady ? (
-                <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4">
+                <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                     <BookOpen className="w-12 h-12 text-slate-200" />
                     <p>Selecciona una {votingMode === 'subject' ? 'materia' : 'cátedra'} para comenzar a votar.</p>
                 </div>
             ) : loading ? (
-                <div className="flex h-64 items-center justify-center text-slate-400">
-                    <span className="animate-pulse">Buscando docentes...</span>
+                <div className="flex h-64 items-center justify-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+                    <span className="animate-pulse font-medium">Buscando docentes...</span>
                 </div>
             ) : !pair ? (
                 <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
@@ -203,26 +228,21 @@ export function EloTrainingPage() {
             ) : (
                 <>
                     {/* Battle Arena */}
-                    <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-16 relative min-h-[auto] md:min-h-[400px]">
-
-                        {/* Desktop VS Badge */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 bg-white rounded-full p-2 shadow-xl border-4 border-indigo-50 hidden md:block animate-bounce">
-                            <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-black text-xl italic skew-x-[-10deg]">
-                                VS
-                            </div>
-                        </div>
+                    <div className="flex flex-col lg:flex-row lg:items-stretch lg:justify-center gap-4 sm:gap-6 md:gap-8 min-h-[auto] md:min-h-[400px]">
 
                         {/* Left Card */}
-                        <ProfessorBattleCard
-                            professor={pair[0]}
-                            onClick={() => handleVote(pair[0], pair[1])}
-                            isWinner={lastWinnerId === pair[0].id}
-                            isLoser={lastWinnerId === pair[1].id}
-                            disabled={animating}
-                        />
+                        <div className="flex-1 lg:max-w-md">
+                            <ProfessorBattleCard
+                                professor={pair[0]}
+                                onClick={() => handleVote(pair[0], pair[1])}
+                                isWinner={lastWinnerId === pair[0].id}
+                                isLoser={lastWinnerId === pair[1].id}
+                                disabled={animating}
+                            />
+                        </div>
 
                         {/* Mobile VS Badge */}
-                        <div className="md:hidden relative z-10 -my-4">
+                        <div className="lg:hidden relative z-10 -my-1 justify-self-center">
                             <div className="bg-white rounded-full p-1.5 shadow-lg border-2 border-indigo-50">
                                 <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white font-black text-xs italic">
                                     VS
@@ -230,24 +250,41 @@ export function EloTrainingPage() {
                             </div>
                         </div>
 
+                        {/* Desktop VS Badge */}
+                        <div className="hidden lg:flex items-center justify-center px-1">
+                            <div className="bg-white rounded-full p-2 shadow-xl border-4 border-indigo-50 animate-bounce">
+                                <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-black text-xl italic skew-x-[-10deg]">
+                                    VS
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Right Card */}
-                        <ProfessorBattleCard
-                            professor={pair[1]}
-                            onClick={() => handleVote(pair[1], pair[0])}
-                            isWinner={lastWinnerId === pair[1].id}
-                            isLoser={lastWinnerId === pair[0].id}
-                            disabled={animating}
-                        />
+                        <div className="flex-1 lg:max-w-md">
+                            <ProfessorBattleCard
+                                professor={pair[1]}
+                                onClick={() => handleVote(pair[1], pair[0])}
+                                isWinner={lastWinnerId === pair[1].id}
+                                isLoser={lastWinnerId === pair[0].id}
+                                disabled={animating}
+                            />
+                        </div>
 
                     </div>
 
                     {/* Skip Action */}
                     <div className="text-center mt-8 md:mt-12">
-                        <Button variant="ghost" className="text-slate-400 hover:text-slate-600" onClick={handleSkip} disabled={animating}>
+                        <Button variant="ghost" className="text-slate-500 hover:text-slate-700" onClick={handleSkip} disabled={animating}>
                             <SkipForward className="w-4 h-4 mr-2" />
                             Saltar esta comparación
                         </Button>
                     </div>
+
+                    {voteError && (
+                        <div className="mt-3 text-center text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 max-w-md mx-auto">
+                            {voteError}
+                        </div>
+                    )}
 
                     <div className="mt-8 text-center text-xs text-slate-300 flex items-center justify-center gap-1">
                         <Info className="w-3 h-3" />
@@ -279,30 +316,30 @@ function ProfessorBattleCard({
     return (
         <div
             className={cn(
-                "relative w-full max-w-sm transition-all duration-500 transform cursor-pointer group px-4 md:px-0",
-                isWinner ? "scale-105 z-20" : isLoser ? "scale-90 opacity-50 grayscale blur-sm" : "hover:scale-[1.02]",
+                "relative w-full transition-all duration-500 transform cursor-pointer group",
+                isWinner ? "scale-[1.02] z-20" : isLoser ? "scale-[0.98] opacity-50 grayscale blur-[1px]" : "hover:scale-[1.01]",
                 disabled ? "pointer-events-none" : ""
             )}
             onClick={onClick}
         >
             <Card className={cn(
-                "overflow-hidden border-2 h-full flex flex-col items-center p-6 md:p-8 text-center transition-all bg-white relative",
+                "overflow-hidden border-2 h-full min-h-[360px] flex flex-col items-center p-5 sm:p-6 md:p-8 text-center transition-all bg-white relative",
                 isWinner ? "border-emerald-500 shadow-2xl shadow-emerald-500/30 ring-4 ring-emerald-100" : "border-slate-100 shadow-lg hover:shadow-xl hover:border-indigo-200"
             )}>
                 {/* Avatar Placeholder */}
                 <div className={cn(
-                    "w-24 h-24 md:w-32 md:h-32 rounded-full mb-4 md:mb-6 flex items-center justify-center text-3xl md:text-4xl font-bold shadow-inner transition-colors",
+                    "w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full mb-4 md:mb-6 flex items-center justify-center text-2xl sm:text-3xl md:text-4xl font-bold shadow-inner transition-colors",
                     isWinner ? "bg-emerald-100 text-emerald-600" : "bg-gradient-to-br from-slate-100 to-indigo-50 text-indigo-400 group-hover:from-indigo-100 group-hover:to-purple-100 group-hover:text-indigo-600"
                 )}>
                     {professor.name.charAt(0)}
                 </div>
 
-                <h3 className="text-xl md:text-2xl font-bold text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-2 min-h-[3.5rem] md:min-h-0 flex items-center justify-center">
+                <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-2 min-h-[3.25rem] flex items-center justify-center">
                     {professor.name}
                 </h3>
 
                 {/* New Role Badge */}
-                <div className="flex justify-center mb-2">
+                <div className="flex justify-center mb-2 min-h-6">
                     {professor.roles?.map(r => (
                         <span key={r} className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 uppercase tracking-wider font-bold">
                             {r}
@@ -310,7 +347,7 @@ function ProfessorBattleCard({
                     ))}
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 md:gap-2 justify-center mb-4 md:mb-6">
+                <div className="flex flex-wrap gap-1.5 md:gap-2 justify-center mb-4 md:mb-6 min-h-8">
                     {professor.subjects.slice(0, 2).map((s, i) => (
                         <span key={i} className="text-[10px] md:text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded border border-slate-200">
                             {s}

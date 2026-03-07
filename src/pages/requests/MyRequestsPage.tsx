@@ -15,8 +15,8 @@ import { ContactStudentModal } from '../../components/requests/ContactStudentMod
 import type { ExchangeRequest } from '../../types';
 
 export function MyRequestsPage() {
-    const { user } = useAuth(); // Need user ID
-    const { myRequests, createMatchingRequest, cancelRequest, finalizeRequest } = useRequests();
+    const { user, submitReview } = useAuth(); // Need user ID
+    const { requests, myRequests, createMatchingRequest, cancelRequest, finalizeRequest, completeRequest } = useRequests();
     const { addNotification } = useNotifications();
     const navigate = useNavigate();
     const [selectedRequest, setSelectedRequest] = useState<ExchangeRequest | null>(null);
@@ -54,10 +54,14 @@ export function MyRequestsPage() {
     };
 
     const handleSubmitReview = (rating: number, comment: string) => {
-        console.log({ rating, comment });
+        if (selectedRequest) {
+            const matchedRequest = requests.find((request) => request.id === selectedRequest.matchedRequestId);
+            const targetUserId = matchedRequest?.userId || MATCHED_USER.id;
+            submitReview(targetUserId, rating, comment, selectedRequest.id);
+            completeRequest(selectedRequest.id);
+        }
         setIsReviewOpen(false);
         addNotification('¡Permuta Completada!', 'Gracias por calificar tu experiencia.', 'success');
-        // Here we would strictly update the status in context
     };
 
 

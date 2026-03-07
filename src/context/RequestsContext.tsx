@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ExchangeRequest } from '../types';
 import { useAuth } from './AuthContext';
 import { useNotifications } from './NotificationsContext';
+import { recomputePendingMatches } from '../domain/requestMatching';
 
 interface RequestsContextType {
     requests: ExchangeRequest[];
@@ -9,10 +10,12 @@ interface RequestsContextType {
     myRequests: ExchangeRequest[];
     createMatchingRequest: (targetRequestId: string) => void;
     finalizeRequest: (requestId: string) => void;
+    completeRequest: (requestId: string) => void;
     cancelRequest: (requestId: string) => void;
 }
 
 const RequestsContext = createContext<RequestsContextType | undefined>(undefined);
+const STORAGE_KEY = 'app-permutas-requests-v2';
 
 // Mock Data for other users
 const MOCK_OTHER_REQUESTS: ExchangeRequest[] = [
@@ -34,63 +37,53 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
 
     // Load initial mock data
     useEffect(() => {
-        setRequests(prev => [...prev, ...MOCK_OTHER_REQUESTS]);
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored) as Array<ExchangeRequest & { createdAt: string }>;
+                setRequests(parsed.map((r) => ({ ...r, createdAt: new Date(r.createdAt) })));
+                return;
+            } catch {
+                // Fallback to seeds.
+            }
+        }
+        setRequests(MOCK_OTHER_REQUESTS);
     }, []);
 
+    useEffect(() => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+    }, [requests]);
+
     const myRequests = requests.filter(r => r.userId === user?.id);
-
-    const checkForMatches = (currentParams: ExchangeRequest[]) => {
-        // Simple Direct Match Logic: A has X wants Y <-> B has Y wants X
-        // We only check against the newest request usually, but here we scan all for demo
-
-        // For every request of mine
-        const myPending = currentParams.filter(r => r.userId === user?.id && r.status === 'PENDING');
-
-        myPending.forEach(myReq => {
-            // Find a match in others
-            const match = currentParams.find(other =>
-                other.userId !== user?.id &&
-                other.status === 'PENDING' &&
-                other.materiaId === myReq.materiaId &&
-                other.comisionOrigenId === myReq.comisionesDestino[0].comisionId && // Keeps simple: checks first preference
-                other.comisionesDestino.some(d => d.comisionId === myReq.comisionOrigenId)
-            );
-
-            if (match) {
-                // Found a match!
-                updateStatus(myReq.id, 'MATCHED');
-                updateStatus(match.id, 'MATCHED');
-                addNotification(
-                    '¡Tenés un Match!',
-                    `Alguien tiene la comisión que buscás en ${myReq.materiaId} y quiere la tuya.`,
-                    'success'
-                );
-            }
-        });
-    };
-
-    const updateStatus = (id: string, status: ExchangeRequest['status']) => {
-        setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
-    };
 
     const addRequest = (newRequestData: Omit<ExchangeRequest, 'id' | 'createdAt' | 'status'>) => {
         const newRequest: ExchangeRequest = {
             ...newRequestData,
-            id: Math.random().toString(36).substr(2, 9),
+            id: crypto.randomUUID(),
             status: 'PENDING',
             createdAt: new Date(),
+            finalizedBy: [],
         };
 
         setRequests(prev => {
-            const updated = [...prev, newRequest];
-            // Auto-check for matches after adding
-            setTimeout(() => checkForMatches(updated), 500);
+            const updated = recomputePendingMatches([...prev, newRequest]);
+            const created = updated.find((r) => r.id === newRequest.id);
+            if (created?.status === 'MATCHED') {
+                addNotification('¡Tenés un Match!', 'Encontramos una solicitud compatible con tus prioridades.', 'success');
+            }
             return updated;
         });
     };
 
     const cancelRequest = (requestId: string) => {
-        setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'CANCELLED' } : r));
+        setRequests(prev => {
+            const marked: ExchangeRequest[] = prev.map((r) => (
+                r.id === requestId
+                    ? { ...r, status: 'CANCELLED' as ExchangeRequest['status'], matchedRequestId: undefined, finalizedBy: [] }
+                    : r
+            ));
+            return recomputePendingMatches(marked);
+        });
         addNotification('Solicitud Cancelada', 'Tu pedido ha sido dado de baja.', 'info');
     };
 
@@ -100,19 +93,19 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
 
         // Create a perfect counter-request
         const counterRequest: ExchangeRequest = {
-            id: `match-${Date.now()}`,
+            id: crypto.randomUUID(),
             userId: 'virtual-student',
             materiaId: targetRequest.materiaId,
             comisionOrigenId: targetRequest.comisionesDestino[0].comisionId, // Has what you want
             comisionesDestino: [{ comisionId: targetRequest.comisionOrigenId, prioridad: 1 }], // Wants what you have
             status: 'PENDING',
-            createdAt: new Date()
+            createdAt: new Date(),
+            finalizedBy: [],
         };
 
         setRequests(prev => {
-            const updated = [...prev, counterRequest];
-            // Check matches immediately
-            setTimeout(() => checkForMatches(updated), 500);
+            const updated = recomputePendingMatches([...prev, counterRequest]);
+            addNotification('Match simulado', 'Se creó una contraparte para probar el flujo de intercambio.', 'info');
             return updated;
         });
     };
@@ -121,47 +114,70 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
         if (!user) return;
 
         setRequests(prev => {
-            const currentReq = prev.find(r => r.id === requestId);
-            if (!currentReq) return prev;
+            const currentReq = prev.find((r) => r.id === requestId);
+            if (!currentReq || !currentReq.matchedRequestId) return prev;
 
-            const updatedFinalizedBy = [...(currentReq.finalizedBy || []), user.id];
+            const partnerReq = prev.find((r) => r.id === currentReq.matchedRequestId);
+            if (!partnerReq) return prev;
 
-            // Logic: Check if partner also finalized (Simulated for Demo)
-            // In a real app we would check the 'matchedRequestId' and its 'finalizedBy'
-            // For Demo: If I finalize, I wait. If Partner finalized, we Confirm.
-            // We will simulate Partner finalizing after 3 seconds if they haven't.
+            const updateFinalizers = (request: ExchangeRequest, actorId: string) => {
+                const set = new Set(request.finalizedBy || []);
+                set.add(actorId);
+                return Array.from(set);
+            };
 
-            const isComplete = updatedFinalizedBy.length >= 2; // Simplification: if this single object has 2 IDs (requires shared object model which we don't strictly have, but we can simulate by adding 'virtual-student' id immediately for demo)
+            const requestFinalizers = updateFinalizers(currentReq, user.id);
+            const partnerFinalizers = partnerReq.userId === 'virtual-student'
+                ? updateFinalizers(partnerReq, 'virtual-student')
+                : (partnerReq.finalizedBy || []);
 
-            // Demo Hack: If I finalize, assume Virtual Student finalizes after 2s
-            if (!updatedFinalizedBy.includes('virtual-student') && currentReq.userId !== 'virtual-student') {
-                setTimeout(() => {
-                    setRequests(current => current.map(r => {
-                        if (r.id === requestId) {
-                            return {
-                                ...r,
-                                finalizedBy: [...(r.finalizedBy || []), 'virtual-student'],
-                                status: 'CONFIRMED'
-                            };
-                        }
-                        return r;
-                    }));
-                    addNotification('¡Permuta Confirmada!', 'Tu compañero también ha finalizado el intercambio.', 'success');
-                }, 3000);
+            const confirmed = requestFinalizers.length > 0 && partnerFinalizers.length > 0;
+
+            const updated = prev.map((request) => {
+                if (request.id === currentReq.id) {
+                    const nextStatus: ExchangeRequest['status'] = confirmed ? 'CONFIRMED' : 'MATCHED';
+                    return {
+                        ...request,
+                        finalizedBy: requestFinalizers,
+                        status: nextStatus
+                    };
+                }
+                if (request.id === partnerReq.id) {
+                    const nextStatus: ExchangeRequest['status'] = confirmed ? 'CONFIRMED' : 'MATCHED';
+                    return {
+                        ...request,
+                        finalizedBy: partnerFinalizers,
+                        status: nextStatus
+                    };
+                }
+                return request;
+            });
+
+            if (confirmed) {
+                addNotification('¡Permuta Confirmada!', 'Ambas partes confirmaron el intercambio.', 'success');
+            } else {
+                addNotification('Confirmación enviada', 'Falta la confirmación de la otra parte.', 'info');
             }
 
-            return prev.map(r => r.id === requestId ? {
-                ...r,
-                finalizedBy: updatedFinalizedBy,
-                // Status remains MATCHED until both finalize, or we can use a transient status? 
-                // Let's keep MATCHED but UI will show "Waiting" based on finalizedBy.includes(me)
-                status: isComplete ? 'CONFIRMED' : 'MATCHED'
-            } : r);
+            return updated;
+        });
+    };
+
+    const completeRequest = (requestId: string) => {
+        setRequests((prev) => {
+            const currentReq = prev.find((r) => r.id === requestId);
+            if (!currentReq) return prev;
+            return prev.map((request) => {
+                if (request.id === requestId || request.id === currentReq.matchedRequestId) {
+                    return { ...request, status: 'COMPLETED' };
+                }
+                return request;
+            });
         });
     };
 
     return (
-        <RequestsContext.Provider value={{ requests, addRequest, myRequests, createMatchingRequest, finalizeRequest, cancelRequest }}>
+        <RequestsContext.Provider value={{ requests, addRequest, myRequests, createMatchingRequest, finalizeRequest, completeRequest, cancelRequest }}>
             {children}
         </RequestsContext.Provider>
     );

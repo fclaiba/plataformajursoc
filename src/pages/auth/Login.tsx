@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
@@ -10,8 +11,14 @@ export function Login() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const { login } = useAuth();
+    const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [isAuthenticated, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,16 +31,11 @@ export function Login() {
             return;
         }
 
-        // Simulate network delay for effect
-        setTimeout(async () => {
-            const success = await login(email);
-            if (success) {
-                navigate('/');
-            } else {
-                setError('Credenciales inválidas. Pruebe con: juan@estudiante.unlp.edu.ar');
-            }
-            setIsLoading(false);
-        }, 800);
+        const success = await login(email, password);
+        if (!success) {
+            setError('Credenciales inválidas o cuenta inexistente.');
+        }
+        setIsLoading(false);
     };
 
     return (

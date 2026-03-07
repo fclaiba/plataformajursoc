@@ -20,6 +20,7 @@ export interface Message {
     id: string;
     senderId: string;
     receiverId: string; // or chatId
+    requestId: string;
     content: string;
     timestamp: Date;
     read: boolean;

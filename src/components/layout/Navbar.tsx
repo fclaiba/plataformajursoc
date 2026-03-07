@@ -36,12 +36,12 @@ export function Navbar() {
                                     <LayoutDashboard className="h-5 w-5" />
                                 </Link>
 
-                                <Link to="/my-requests" id="tour-mis-solicitudes" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title="Mis Solicitudes">
-                                    <ArrowRightLeft className="h-5 w-5" />
-                                </Link>
-
                                 <Link to="/mis-materias" id="tour-mis-materias" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title="Mis Materias">
                                     <Library className="h-5 w-5" />
+                                </Link>
+
+                                <Link to="/my-requests" id="tour-mis-solicitudes" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title="Mis Solicitudes">
+                                    <ArrowRightLeft className="h-5 w-5" />
                                 </Link>
 
                                 <Link to="/mapa-correlativas" id="tour-correlativas" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title="Mapa de Correlativas">
@@ -61,18 +61,28 @@ export function Navbar() {
                                     )}
                                 </Link>
 
-                                <div className="flex items-center space-x-3 ml-2 pl-4 border-l border-gray-200">
-                                    <div className="flex flex-col text-right hidden md:block">
-                                        <Link to="/profile" className="text-sm font-bold text-gray-700 w-24 truncate hover:text-primary-600 transition-colors">
-                                            {user?.name}
-                                        </Link>
-                                        <span className="text-xs text-primary-500 font-medium">Estudiante</span>
-                                    </div>
+                                <div className="flex items-center gap-2 sm:gap-3 ml-1.5 sm:ml-2 pl-3 sm:pl-4 border-l border-gray-200 shrink-0">
+                                    <Link
+                                        to="/profile"
+                                        className="hidden md:flex items-center gap-2.5 bg-white/70 border border-slate-200 rounded-xl px-2.5 lg:px-3 py-1.5 min-w-[160px] lg:min-w-[190px] max-w-[220px] hover:border-primary-200 hover:bg-primary-50/60 transition-all"
+                                    >
+                                        <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                            {(user?.name?.charAt(0) || 'U').toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0 text-left leading-tight">
+                                            <div className="text-sm font-bold text-gray-700 truncate">
+                                                {user?.name || 'Usuario'}
+                                            </div>
+                                            <div className="text-[11px] text-primary-500 font-medium truncate">
+                                                Estudiante
+                                            </div>
+                                        </div>
+                                    </Link>
                                     <Button
                                         variant="ghost"
                                         size="sm"
                                         onClick={handleLogout}
-                                        className="text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full w-9 h-9 p-0"
+                                        className="text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full w-9 h-9 p-0 flex-shrink-0"
                                     >
                                         <LogOut className="h-4 w-4" />
                                     </Button>

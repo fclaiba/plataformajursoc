@@ -33,7 +33,7 @@ export interface VoteContext {
 
 interface ProfessorsContextType {
     professors: Professor[];
-    vote: (winnerId: string, loserId: string, context: VoteContext) => void;
+    vote: (winnerId: string, loserId: string, context: VoteContext) => { ok: boolean; reason?: string };
     getTwoRandomProfessors: (filters?: { role?: string, subjectId?: string, catedraId?: string }) => [Professor, Professor] | null;
     resetRatings: () => void;
 }
@@ -42,6 +42,15 @@ const ProfessorsContext = createContext<ProfessorsContextType | undefined>(undef
 
 const K_FACTOR = 32;
 const INITIAL_ELO = 1200;
+const MAX_DAILY_VOTES = 120;
+const DUPLICATE_PAIR_COOLDOWN_MS = 2500;
+const VOTES_META_STORAGE_KEY = 'juridica_professors_votes_meta_v1';
+
+interface VoteMeta {
+    dayKey: string;
+    votesToday: number;
+    lastVoteByPair: Record<string, number>;
+}
 
 const getTier = (elo: number) => {
     if (elo >= 1800) return 'Diamond';
@@ -134,6 +143,17 @@ const extractProfessors = (): Professor[] => {
 
 export function ProfessorsProvider({ children }: { children: React.ReactNode }) {
     const [professors, setProfessors] = useState<Professor[]>([]);
+    const [voteMeta, setVoteMeta] = useState<VoteMeta>(() => {
+        const raw = localStorage.getItem(VOTES_META_STORAGE_KEY);
+        if (raw) {
+            try {
+                return JSON.parse(raw);
+            } catch {
+                // Fallback to defaults.
+            }
+        }
+        return { dayKey: new Date().toDateString(), votesToday: 0, lastVoteByPair: {} };
+    });
 
     useEffect(() => {
         const stored = localStorage.getItem('juridica_professors_elo_v3'); // Bump version
@@ -161,7 +181,31 @@ export function ProfessorsProvider({ children }: { children: React.ReactNode }) 
         }
     }, [professors]);
 
+    useEffect(() => {
+        localStorage.setItem(VOTES_META_STORAGE_KEY, JSON.stringify(voteMeta));
+    }, [voteMeta]);
+
     const vote = (winnerId: string, loserId: string, context: VoteContext) => {
+        if (winnerId === loserId) {
+            return { ok: false, reason: 'No se puede votar por el mismo docente.' };
+        }
+
+        const now = Date.now();
+        const today = new Date().toDateString();
+        const normalizedMeta = voteMeta.dayKey === today
+            ? voteMeta
+            : { dayKey: today, votesToday: 0, lastVoteByPair: {} };
+
+        if (normalizedMeta.votesToday >= MAX_DAILY_VOTES) {
+            return { ok: false, reason: 'Alcanzaste el límite diario de votos.' };
+        }
+
+        const pairKey = [winnerId, loserId].sort().join('__') + `__${context.type}__${context.id}`;
+        const lastVoteAt = normalizedMeta.lastVoteByPair[pairKey];
+        if (lastVoteAt && (now - lastVoteAt) < DUPLICATE_PAIR_COOLDOWN_MS) {
+            return { ok: false, reason: 'Debes esperar un momento antes de votar el mismo par.' };
+        }
+
         setProfessors(prev => {
             const winnerIndex = prev.findIndex(p => p.id === winnerId);
             const loserIndex = prev.findIndex(p => p.id === loserId);
@@ -210,6 +254,15 @@ export function ProfessorsProvider({ children }: { children: React.ReactNode }) 
 
             return newProfs;
         });
+        setVoteMeta({
+            ...normalizedMeta,
+            votesToday: normalizedMeta.votesToday + 1,
+            lastVoteByPair: {
+                ...normalizedMeta.lastVoteByPair,
+                [pairKey]: now
+            }
+        });
+        return { ok: true };
     };
 
     const getTwoRandomProfessors = (filters?: { role?: string, subjectId?: string, catedraId?: string }): [Professor, Professor] | null => {
@@ -241,6 +294,8 @@ export function ProfessorsProvider({ children }: { children: React.ReactNode }) 
     const resetRatings = () => {
         setProfessors(extractProfessors());
         localStorage.removeItem('juridica_professors_elo_v3');
+        localStorage.removeItem(VOTES_META_STORAGE_KEY);
+        setVoteMeta({ dayKey: new Date().toDateString(), votesToday: 0, lastVoteByPair: {} });
     };
 
     return (

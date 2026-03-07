@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 
 export function NotificationsPage() {
-    const { notifications, markAsRead } = useNotifications();
+    const { notifications, markAsRead, clearAll } = useNotifications();
 
     const getIcon = (type: string) => {
         switch (type) {
@@ -79,7 +79,7 @@ export function NotificationsPage() {
 
             {notifications.length > 0 && (
                 <div className="flex justify-center pt-4">
-                    <Button variant="ghost" className="text-slate-400 hover:text-red-500 hover:bg-red-50">
+                    <Button variant="ghost" className="text-slate-400 hover:text-red-500 hover:bg-red-50" onClick={clearAll}>
                         <Trash2 className="w-4 h-4 mr-2" /> Limpiar historial
                     </Button>
                 </div>

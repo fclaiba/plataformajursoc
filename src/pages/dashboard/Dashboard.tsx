@@ -3,14 +3,18 @@ import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { List, ArrowRightLeft, Search } from 'lucide-react';
-import { MATERIAS } from '../../data/mock';
+import { CATEDRAS, COMISIONES, MATERIAS } from '../../data/mock';
 
 export function Dashboard() {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    // Mock enrollment for the user
-    const mySubjects = MATERIAS.slice(0, 2); // Assume enrolled in first 2
+    const mySubjects = (user?.enrollments || []).map((enrollment) => {
+        const materia = MATERIAS.find((subject) => subject.id === enrollment.materiaId);
+        const catedra = CATEDRAS.find((cathedra) => cathedra.id === enrollment.catedraId);
+        const comision = COMISIONES.find((commission) => commission.id === enrollment.comisionId);
+        return { materia, catedra, comision };
+    }).filter((entry) => entry.materia && entry.catedra && entry.comision);
 
     return (
         <div className="space-y-6 sm:space-y-10">
@@ -69,21 +73,21 @@ export function Dashboard() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {mySubjects.map((materia) => (
-                        <Card key={materia.id} className="border-t-4 border-t-primary-500 hover:-translate-y-1 transition-transform duration-300">
+                    {mySubjects.map(({ materia, catedra, comision }) => (
+                        <Card key={materia!.id} className="border-t-4 border-t-primary-500 hover:-translate-y-1 transition-transform duration-300">
                             <CardHeader className="pb-2">
-                                <div className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-1">Año {materia.anio}</div>
-                                <CardTitle className="text-lg text-slate-900">{materia.nombre}</CardTitle>
+                                <div className="text-xs font-bold text-primary-600 uppercase tracking-wider mb-1">Año {materia!.anio}</div>
+                                <CardTitle className="text-lg text-slate-900">{materia!.nombre}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="text-sm text-slate-500 mb-4">
-                                    Comisión Actual: 1 (Lunes Mañana)
+                                    {catedra!.nombre} - Comisión {comision!.numero}
                                 </div>
                                 <Button
                                     variant="outline"
                                     size="sm"
                                     className="w-full border-dashed group-hover:border-solid hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 transition-all"
-                                    onClick={() => navigate(`/search?materia=${materia.id}`)}
+                                    onClick={() => navigate(`/search?materia=${materia!.id}`)}
                                 >
                                     Ver Opciones
                                 </Button>
@@ -92,7 +96,7 @@ export function Dashboard() {
                     ))}
 
                     {/* Add Placeholder for Enrollment */}
-                    <Card className="border-2 border-dashed border-slate-200 hover:border-slate-300 bg-transparent shadow-none flex items-center justify-center min-h-[180px] cursor-pointer group" onClick={() => { }}>
+                    <Card className="border-2 border-dashed border-slate-200 hover:border-slate-300 bg-transparent shadow-none flex items-center justify-center min-h-[180px] cursor-pointer group" onClick={() => navigate('/mis-materias')}>
                         <div className="text-center">
                             <div className="w-10 h-10 rounded-full bg-slate-100 mx-auto flex items-center justify-center mb-2 group-hover:bg-slate-200 transition-colors">
                                 <span className="text-2xl text-slate-400 group-hover:text-slate-500">+</span>
