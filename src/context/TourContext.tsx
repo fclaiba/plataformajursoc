@@ -4,6 +4,8 @@ import 'driver.js/dist/driver.css';
 import '../components/tour/TourStyles.css';
 import { useAuth } from './AuthContext';
 
+const TOUR_SYNC_MODE = 'local_only';
+
 interface TourContextType {
     startTour: () => void;
     resetTour: () => void;
@@ -145,6 +147,7 @@ export const TourProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     const completeTour = () => {
+        if (TOUR_SYNC_MODE !== 'local_only') return;
         localStorage.setItem('hasSeenTour', 'true');
         setHasSeenTour(true);
     };

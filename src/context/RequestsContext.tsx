@@ -1,183 +1,145 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import { useConvex, useMutation, useQuery } from 'convex/react';
 import type { ExchangeRequest } from '../types';
 import { useAuth } from './AuthContext';
 import { useNotifications } from './NotificationsContext';
-import { recomputePendingMatches } from '../domain/requestMatching';
+import {
+    requestsCancel,
+    requestsComplete,
+    requestsCreate,
+    requestsFinalize,
+    requestsListVisibleByUser,
+    subjectsGetCatalogIdsByExternal,
+} from '../convex/functions';
 
 interface RequestsContextType {
     requests: ExchangeRequest[];
-    addRequest: (request: Omit<ExchangeRequest, 'id' | 'createdAt' | 'status'>) => void;
+    addRequest: (request: Omit<ExchangeRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
     myRequests: ExchangeRequest[];
-    createMatchingRequest: (targetRequestId: string) => void;
-    finalizeRequest: (requestId: string) => void;
-    completeRequest: (requestId: string) => void;
-    cancelRequest: (requestId: string) => void;
+    createMatchingRequest: (_targetRequestId: string) => void;
+    finalizeRequest: (requestId: string) => Promise<void>;
+    cancelRequest: (requestId: string) => Promise<void>;
 }
 
 const RequestsContext = createContext<RequestsContextType | undefined>(undefined);
-const STORAGE_KEY = 'app-permutas-requests-v2';
-
-// Mock Data for other users
-const MOCK_OTHER_REQUESTS: ExchangeRequest[] = [
-    {
-        id: 'req-101',
-        userId: 'user-2',
-        materiaId: 'civ-1', // Civil I
-        comisionOrigenId: 'com-2', // Has Com 2
-        comisionesDestino: [{ comisionId: 'com-1', prioridad: 1 }], // Wants Com 1
-        status: 'PENDING',
-        createdAt: new Date()
-    }
-];
 
 export function RequestsProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
     const { addNotification } = useNotifications();
-    const [requests, setRequests] = useState<ExchangeRequest[]>([]);
+    const convex = useConvex();
+    const createRequestMutation = useMutation(requestsCreate);
+    const cancelRequestMutation = useMutation(requestsCancel);
+    const finalizeRequestMutation = useMutation(requestsFinalize);
+    const completeRequestMutation = useMutation(requestsComplete);
+    const autoClosingRequestsRef = useRef<Set<string>>(new Set());
+    const rows = useQuery(
+        requestsListVisibleByUser,
+        user?.id ? { userId: user.id, limit: 100 } : "skip"
+    );
 
-    // Load initial mock data
+    const requests = useMemo<ExchangeRequest[]>(() => {
+        return (rows || []).map((row) => ({
+            id: row._id,
+            userId: row.userId,
+            materiaId: row.subjectExternalId ?? row.subjectId,
+            comisionOrigenId: row.commissionOriginExternalId ?? row.commissionOriginId,
+            comisionesDestino: (row.destinationsExternal || row.destinations || []).map((destination: any) => ({
+                comisionId: destination.commissionId,
+                prioridad: destination.priority,
+            })),
+            status: row.status,
+            createdAt: new Date(row.createdAt),
+            matchedRequestId: row.matchedRequestId,
+            finalizedBy: row.finalizedBy,
+        }));
+    }, [rows]);
+
+    const myRequests = requests.filter((request) => request.userId === user?.id);
+
     useEffect(() => {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored) as Array<ExchangeRequest & { createdAt: string }>;
-                setRequests(parsed.map((r) => ({ ...r, createdAt: new Date(r.createdAt) })));
-                return;
-            } catch {
-                // Fallback to seeds.
-            }
+        if (!user?.id) return;
+        for (const request of myRequests) {
+            if (request.status !== 'CONFIRMED' || !request.matchedRequestId) continue;
+            if (autoClosingRequestsRef.current.has(request.id)) continue;
+            autoClosingRequestsRef.current.add(request.id);
+            void completeRequestMutation({ requestId: request.id, actorUserId: user.id })
+                .catch((error) => {
+                    const message = error instanceof Error ? error.message : 'No se pudo cerrar automáticamente la permuta.';
+                    addNotification('Cierre automático pendiente', message, 'warning', 'requests');
+                })
+                .finally(() => {
+                    autoClosingRequestsRef.current.delete(request.id);
+                });
         }
-        setRequests(MOCK_OTHER_REQUESTS);
-    }, []);
+    }, [myRequests, user?.id, completeRequestMutation, addNotification]);
 
-    useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
-    }, [requests]);
-
-    const myRequests = requests.filter(r => r.userId === user?.id);
-
-    const addRequest = (newRequestData: Omit<ExchangeRequest, 'id' | 'createdAt' | 'status'>) => {
-        const newRequest: ExchangeRequest = {
-            ...newRequestData,
-            id: crypto.randomUUID(),
-            status: 'PENDING',
-            createdAt: new Date(),
-            finalizedBy: [],
-        };
-
-        setRequests(prev => {
-            const updated = recomputePendingMatches([...prev, newRequest]);
-            const created = updated.find((r) => r.id === newRequest.id);
-            if (created?.status === 'MATCHED') {
-                addNotification('¡Tenés un Match!', 'Encontramos una solicitud compatible con tus prioridades.', 'success');
-            }
-            return updated;
+    const addRequest = async (newRequestData: Omit<ExchangeRequest, 'id' | 'createdAt' | 'status'>) => {
+        if (!user?.id) return;
+        const destinationExternalIds = newRequestData.comisionesDestino.map((destination) => destination.comisionId);
+        const mapping = await convex.query(subjectsGetCatalogIdsByExternal, {
+            subjectExternalId: newRequestData.materiaId,
+            commissionExternalIds: [newRequestData.comisionOrigenId, ...destinationExternalIds],
         });
+
+        if (!mapping.subjectId) {
+            throw new Error('La materia seleccionada no existe en Convex.');
+        }
+
+        const commissionMap = new Map(mapping.commissions.map((commission) => [commission.externalId, commission.id]));
+        const originCommissionId = commissionMap.get(newRequestData.comisionOrigenId);
+        if (!originCommissionId) {
+            throw new Error('No se pudo resolver la comisión de origen.');
+        }
+
+        const destinations = newRequestData.comisionesDestino
+            .map((destination) => ({
+                commissionId: commissionMap.get(destination.comisionId),
+                priority: destination.prioridad,
+            }))
+            .filter((destination): destination is { commissionId: string; priority: number } => !!destination.commissionId);
+
+        if (destinations.length === 0) {
+            throw new Error('No se pudieron resolver comisiones de destino en Convex.');
+        }
+
+        await createRequestMutation({
+            userId: user.id,
+            subjectId: mapping.subjectId,
+            commissionOriginId: originCommissionId,
+            destinations,
+        });
+
+        addNotification('Solicitud creada', 'Tu solicitud ya está publicada en Convex.', 'success', 'requests');
     };
 
-    const cancelRequest = (requestId: string) => {
-        setRequests(prev => {
-            const marked: ExchangeRequest[] = prev.map((r) => (
-                r.id === requestId
-                    ? { ...r, status: 'CANCELLED' as ExchangeRequest['status'], matchedRequestId: undefined, finalizedBy: [] }
-                    : r
-            ));
-            return recomputePendingMatches(marked);
-        });
-        addNotification('Solicitud Cancelada', 'Tu pedido ha sido dado de baja.', 'info');
+    const cancelRequest = async (requestId: string) => {
+        if (!user?.id) return;
+        try {
+            await cancelRequestMutation({ requestId, actorUserId: user.id });
+            addNotification('Solicitud cancelada', 'Tu pedido fue dado de baja y el matching se recalculará.', 'info', 'requests');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo cancelar la solicitud.';
+            addNotification('Cancelación inválida', message, 'warning', 'requests');
+        }
     };
 
-    const createMatchingRequest = (targetRequestId: string) => {
-        const targetRequest = requests.find(r => r.id === targetRequestId);
-        if (!targetRequest || targetRequest.status !== 'PENDING') return;
-
-        // Create a perfect counter-request
-        const counterRequest: ExchangeRequest = {
-            id: crypto.randomUUID(),
-            userId: 'virtual-student',
-            materiaId: targetRequest.materiaId,
-            comisionOrigenId: targetRequest.comisionesDestino[0].comisionId, // Has what you want
-            comisionesDestino: [{ comisionId: targetRequest.comisionOrigenId, prioridad: 1 }], // Wants what you have
-            status: 'PENDING',
-            createdAt: new Date(),
-            finalizedBy: [],
-        };
-
-        setRequests(prev => {
-            const updated = recomputePendingMatches([...prev, counterRequest]);
-            addNotification('Match simulado', 'Se creó una contraparte para probar el flujo de intercambio.', 'info');
-            return updated;
-        });
+    const createMatchingRequest = () => {
+        addNotification('Matching automático', 'El matching ahora se ejecuta desde Convex.', 'info', 'requests');
     };
 
-    const finalizeRequest = (requestId: string) => {
-        if (!user) return;
-
-        setRequests(prev => {
-            const currentReq = prev.find((r) => r.id === requestId);
-            if (!currentReq || !currentReq.matchedRequestId) return prev;
-
-            const partnerReq = prev.find((r) => r.id === currentReq.matchedRequestId);
-            if (!partnerReq) return prev;
-
-            const updateFinalizers = (request: ExchangeRequest, actorId: string) => {
-                const set = new Set(request.finalizedBy || []);
-                set.add(actorId);
-                return Array.from(set);
-            };
-
-            const requestFinalizers = updateFinalizers(currentReq, user.id);
-            const partnerFinalizers = partnerReq.userId === 'virtual-student'
-                ? updateFinalizers(partnerReq, 'virtual-student')
-                : (partnerReq.finalizedBy || []);
-
-            const confirmed = requestFinalizers.length > 0 && partnerFinalizers.length > 0;
-
-            const updated = prev.map((request) => {
-                if (request.id === currentReq.id) {
-                    const nextStatus: ExchangeRequest['status'] = confirmed ? 'CONFIRMED' : 'MATCHED';
-                    return {
-                        ...request,
-                        finalizedBy: requestFinalizers,
-                        status: nextStatus
-                    };
-                }
-                if (request.id === partnerReq.id) {
-                    const nextStatus: ExchangeRequest['status'] = confirmed ? 'CONFIRMED' : 'MATCHED';
-                    return {
-                        ...request,
-                        finalizedBy: partnerFinalizers,
-                        status: nextStatus
-                    };
-                }
-                return request;
-            });
-
-            if (confirmed) {
-                addNotification('¡Permuta Confirmada!', 'Ambas partes confirmaron el intercambio.', 'success');
-            } else {
-                addNotification('Confirmación enviada', 'Falta la confirmación de la otra parte.', 'info');
-            }
-
-            return updated;
-        });
-    };
-
-    const completeRequest = (requestId: string) => {
-        setRequests((prev) => {
-            const currentReq = prev.find((r) => r.id === requestId);
-            if (!currentReq) return prev;
-            return prev.map((request) => {
-                if (request.id === requestId || request.id === currentReq.matchedRequestId) {
-                    return { ...request, status: 'COMPLETED' };
-                }
-                return request;
-            });
-        });
+    const finalizeRequest = async (requestId: string) => {
+        if (!user?.id) return;
+        try {
+            await finalizeRequestMutation({ requestId, actorUserId: user.id });
+            addNotification('Confirmación enviada', 'Tu confirmación fue registrada. El cierre se completa cuando ambos confirman.', 'success', 'requests');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo confirmar la solicitud.';
+            addNotification('Confirmación inválida', message, 'warning', 'requests');
+        }
     };
 
     return (
-        <RequestsContext.Provider value={{ requests, addRequest, myRequests, createMatchingRequest, finalizeRequest, completeRequest, cancelRequest }}>
+        <RequestsContext.Provider value={{ requests, addRequest, myRequests, createMatchingRequest, finalizeRequest, cancelRequest }}>
             {children}
         </RequestsContext.Provider>
     );

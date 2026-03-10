@@ -1,10 +1,13 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ScrollArea } from '../ui/scroll-area';
-import { Book, FileText, FileType, ExternalLink, Download } from 'lucide-react';
+import { Book, FileText, FileType, ExternalLink, Download, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import type { Materia } from '../../types';
+import { useMutation, useQuery } from 'convex/react';
+import { resourcesCreate, resourcesDelete, resourcesListBySubject } from '../../convex/functions';
+import { useAuth } from '../../context/AuthContext';
 
 interface SubjectResourcesModalProps {
     isOpen: boolean;
@@ -23,30 +26,38 @@ interface Resource {
 }
 
 export function SubjectResourcesModal({ isOpen, onClose, materia }: SubjectResourcesModalProps) {
+    const { isAdmin } = useAuth();
+    const createResource = useMutation(resourcesCreate);
+    const deleteResource = useMutation(resourcesDelete);
+    const resources = useQuery(
+        resourcesListBySubject,
+        materia ? { subjectExternalId: materia.id } : 'skip'
+    );
     if (!materia) return null;
 
-    // Generate Dynamic Resources based on Subject Name to simulate real data
     const getResources = (type: 'biblio' | 'apuntes' | 'resumenes'): Resource[] => {
-        switch (type) {
-            case 'biblio':
-                return [
-                    { id: 'b1', title: `Manual de ${materia.nombre} - Ed. 2024`, author: 'Cátedra Oficial', type: 'pdf', url: '#', size: '15 MB' },
-                    { id: 'b2', title: `Tratado de ${materia.nombre}`, author: 'Autor Recomendado', type: 'pdf', url: '#', size: '22 MB' },
-                    { id: 'b3', title: 'Código Comentado y Concordado', author: 'InfoLeg', type: 'link', url: '#' },
-                ];
-            case 'apuntes':
-                return [
-                    { id: 'a1', title: `Apuntes de Clase - ${materia.nombre} (Parte 1)`, author: 'Comisión 2 - 2024', type: 'pdf', url: '#', size: '4 MB' },
-                    { id: 'a2', title: 'Resumen para el Primer Parcial', author: 'Estudiante Anónimo', type: 'pdf', url: '#', size: '2 MB' },
-                    { id: 'a3', title: 'Guía de Preguntas Frecuentes', author: 'Centro de Estudiantes', type: 'pdf', url: '#', size: '1 MB' },
-                ];
-            case 'resumenes':
-                return [
-                    { id: 'r1', title: `Resumen Completo ${materia.nombre}`, author: 'Grupo de Estudio', type: 'pdf', url: '#', size: '8 MB' },
-                    { id: 'r2', title: 'Cuadros Sinópticos - Unidad 1-5', author: 'Sofía L.', type: 'pdf', url: '#', size: '1.5 MB' },
-                ];
-            default: return [];
-        }
+        return (resources || [])
+            .filter((r) => r.category === type)
+            .map((r) => ({
+                id: r._id,
+                title: r.title,
+                author: r.author,
+                type: r.type,
+                url: r.url,
+                size: r.size,
+            }));
+    };
+
+    const addQuickResource = async (category: 'biblio' | 'apuntes' | 'resumenes') => {
+        await createResource({
+            subjectExternalId: materia.id,
+            category,
+            title: `Nuevo recurso - ${materia.nombre}`,
+            author: 'Admin',
+            type: 'link',
+            url: 'https://example.com',
+            size: undefined,
+        });
     };
 
     return (
@@ -79,6 +90,13 @@ export function SubjectResourcesModal({ isOpen, onClose, materia }: SubjectResou
 
                     {(['biblio', 'apuntes', 'resumenes'] as const).map((tab) => (
                         <TabsContent key={tab} value={tab} className="flex-1 min-h-0 mt-0">
+                            {isAdmin && (
+                                <div className="mb-2">
+                                    <Button size="sm" variant="outline" onClick={() => void addQuickResource(tab)}>
+                                        <Plus className="w-4 h-4 mr-1" /> Agregar recurso
+                                    </Button>
+                                </div>
+                            )}
                             <ScrollArea className="h-[calc(100%-2rem)] pr-4">
                                 <div className="space-y-3 pb-4">
                                     {getResources(tab).map((res) => (
@@ -102,9 +120,23 @@ export function SubjectResourcesModal({ isOpen, onClose, materia }: SubjectResou
                                             </div>
 
                                             <div className="flex-shrink-0 ml-4 self-center">
-                                                <Button variant="ghost" size="icon" className="text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-full">
-                                                    <Download className="w-5 h-5" />
-                                                </Button>
+                                                <div className="flex gap-1">
+                                                    <a href={res.url} target="_blank" rel="noreferrer">
+                                                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-full">
+                                                            <Download className="w-5 h-5" />
+                                                        </Button>
+                                                    </a>
+                                                    {isAdmin && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full"
+                                                            onClick={() => void deleteResource({ resourceId: res.id })}
+                                                        >
+                                                            <Trash2 className="w-5 h-5" />
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}

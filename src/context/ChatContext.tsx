@@ -1,90 +1,133 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery } from 'convex/react';
 import { useAuth } from './AuthContext';
 import type { Message } from '../types';
+import { chatGenerateUploadUrl, chatGetOrCreateThread, chatListMessagesByThread, chatMarkThreadMessagesAsRead, chatSendMessage } from '../convex/functions';
 
 interface ChatContextType {
     messages: Message[];
-    sendMessage: (receiverId: string, content: string, requestId: string, file?: File) => void;
+    sendMessage: (content: string, requestId: string, file?: File) => Promise<void>;
     getMessagesByRequest: (requestId: string) => Message[];
-    markAsRead: (messageId: string) => void;
+    markAsRead: (_messageId: string) => void;
+    subscribeToRequest: (requestId: string) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
-const CHAT_STORAGE_KEY = 'app-permutas-chat-v1';
-
-// Mock initial messages
-const INITIAL_MESSAGES: Message[] = [];
+const CHAT_DEBUG = import.meta.env.DEV;
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
-    const [messages, setMessages] = useState<Message[]>(() => {
-        const raw = localStorage.getItem(CHAT_STORAGE_KEY);
-        if (!raw) return INITIAL_MESSAGES;
-        try {
-            const parsed = JSON.parse(raw) as Array<Message & { timestamp: string }>;
-            return parsed.map((message) => ({ ...message, timestamp: new Date(message.timestamp) }));
-        } catch {
-            return INITIAL_MESSAGES;
+    const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+    const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+    const [messagesByRequest, setMessagesByRequest] = useState<Record<string, Message[]>>({});
+    const getOrCreateThread = useMutation(chatGetOrCreateThread);
+    const generateUploadUrl = useMutation(chatGenerateUploadUrl);
+    const sendMessageMutation = useMutation(chatSendMessage);
+    const markThreadMessagesAsRead = useMutation(chatMarkThreadMessagesAsRead);
+    const rows = useQuery(
+        chatListMessagesByThread,
+        activeThreadId ? { threadId: activeThreadId, limit: 200 } : "skip"
+    );
+
+    useEffect(() => {
+        if (!activeRequestId || !rows) return;
+        if (CHAT_DEBUG) {
+            console.info('[chat:rows]', { activeRequestId, activeThreadId, count: rows.length });
         }
-    });
+        const normalized: Message[] = rows.map((row) => ({
+            id: row._id,
+            senderId: row.senderUserId,
+            receiverId: '',
+            requestId: row.requestId,
+            content: row.content,
+            timestamp: new Date(row.createdAt),
+            read: !!row.readAt,
+            type: row.type,
+            mediaUrl: row.mediaUrl,
+        }));
+        setMessagesByRequest((current) => ({ ...current, [activeRequestId]: normalized }));
+    }, [activeRequestId, rows]);
 
-    const persistMessages = (updater: (current: Message[]) => Message[]) => {
-        setMessages((prev) => {
-            const next = updater(prev);
-            localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(next));
-            return next;
-        });
-    };
-
-    const sendMessage = (receiverId: string, content: string, requestId: string, file?: File) => {
+    const sendMessage = useCallback(async (content: string, requestId: string, file?: File) => {
         if (!user) return;
-
-        const newMessage: Message = {
-            id: crypto.randomUUID(),
-            senderId: user.id,
-            receiverId,
-            requestId,
-            content,
-            timestamp: new Date(),
-            read: false,
-            type: file ? 'image' : 'text',
-            mediaUrl: file ? URL.createObjectURL(file) : undefined
-        };
-
-        persistMessages((current) => [...current, newMessage]);
-
-        // Auto-reply for demo
-        if (content.toLowerCase().includes('hola') || (file && Math.random() > 0.5)) {
-            setTimeout(() => {
-                const reply: Message = {
-                    id: crypto.randomUUID(),
-                    senderId: receiverId,
-                    receiverId: user.id,
-                    requestId,
-                    content: '¡Hola! Recibí tu mensaje. ¿Te parece si coordinamos?',
-                    timestamp: new Date(),
-                    read: false,
-                    type: 'text'
-                };
-                persistMessages((current) => [...current, reply]);
-            }, 2000);
+        const threadId =
+            activeThreadId ??
+            await getOrCreateThread({
+                requestId,
+            });
+        if (!activeThreadId) setActiveThreadId(threadId);
+        if (CHAT_DEBUG) {
+            console.info('[chat:send:prepare]', { requestId, threadId, type: file ? 'image' : 'text' });
         }
-    };
-    const getMessagesByRequest = (requestId: string) => {
-        return messages.filter((message) => (
-            message.requestId === requestId &&
-            (message.senderId === user?.id || message.receiverId === user?.id)
-        ));
-    };
 
-    const markAsRead = (messageId: string) => {
-        persistMessages((current) => current.map((message) => (
-            message.id === messageId ? { ...message, read: true } : message
-        )));
-    };
+        let mediaStorageId: string | undefined;
+        if (file) {
+            const postUrl = await generateUploadUrl({});
+            const uploadResponse = await fetch(postUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': file.type },
+                body: file,
+            });
+            if (!uploadResponse.ok) {
+                throw new Error('No se pudo subir el archivo a Convex.');
+            }
+            const payload = await uploadResponse.json() as { storageId?: string };
+            mediaStorageId = payload.storageId;
+        }
+
+        await sendMessageMutation({
+            threadId,
+            requestId,
+            senderUserId: user.id,
+            content,
+            type: file ? 'image' : 'text',
+            mediaStorageId,
+        });
+        if (CHAT_DEBUG) {
+            console.info('[chat:send:ok]', { requestId, threadId });
+        }
+    }, [user, activeThreadId, getOrCreateThread, generateUploadUrl, sendMessageMutation]);
+    const getMessagesByRequest = useCallback((requestId: string) => {
+        return messagesByRequest[requestId] || [];
+    }, [messagesByRequest]);
+
+    const markAsRead = useCallback((messageId: string) => {
+        void messageId;
+        if (!user || !activeThreadId) return;
+        void markThreadMessagesAsRead({
+            threadId: activeThreadId,
+            readerUserId: user.id,
+        });
+    }, [user, activeThreadId, markThreadMessagesAsRead]);
+    const subscribeToRequest = useCallback((requestId: string) => {
+        setActiveRequestId((current) => {
+            if (current === requestId) return current;
+            setActiveThreadId(null);
+            return requestId;
+        });
+    }, []);
+    const messages = useMemo(() => Object.values(messagesByRequest).flat(), [messagesByRequest]);
+
+    useEffect(() => {
+        if (!user || !activeRequestId) return;
+        void getOrCreateThread({
+            requestId: activeRequestId,
+        }).then((threadId) => {
+            if (CHAT_DEBUG) {
+                console.info('[chat:subscribe]', { activeRequestId, threadId });
+            }
+            setActiveThreadId(threadId);
+            void markThreadMessagesAsRead({
+                threadId,
+                readerUserId: user.id,
+            });
+        }).catch((error) => {
+            console.error('[chat:get-or-create-thread]', error);
+        });
+    }, [user, activeRequestId, getOrCreateThread, markThreadMessagesAsRead]);
 
     return (
-        <ChatContext.Provider value={{ messages, sendMessage, getMessagesByRequest, markAsRead }}>
+        <ChatContext.Provider value={{ messages, sendMessage, getMessagesByRequest, markAsRead, subscribeToRequest }}>
             {children}
         </ChatContext.Provider>
     );

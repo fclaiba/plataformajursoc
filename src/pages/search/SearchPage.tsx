@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { CommissionCard } from '../../components/dashboard/CommissionCard';
-import { COMISIONES, MATERIAS, CATEDRAS } from '../../data/mock';
 import { Filter, X, Search as SearchIcon, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Card } from '../../components/ui/card';
+import { useCatalog } from '../../context/CatalogContext';
 
 export function SearchPage() {
+    const { comisiones, materias, catedras } = useCatalog();
     const [params] = useSearchParams();
     const initialMateriaId = params.get('materia');
 
@@ -19,12 +20,12 @@ export function SearchPage() {
     // Derived state for available options
     const availableCatedras = useMemo(() => {
         if (!selectedMateria) return [];
-        return CATEDRAS.filter(c => c.materiaId === selectedMateria);
-    }, [selectedMateria]);
+        return catedras.filter(c => c.materiaId === selectedMateria);
+    }, [selectedMateria, catedras]);
 
     // Filter Logic
     const filteredCommissions = useMemo(() => {
-        let result = COMISIONES;
+        let result = comisiones;
 
         if (selectedMateria) {
             result = result.filter(c => c.materiaId === selectedMateria);
@@ -48,7 +49,7 @@ export function SearchPage() {
         }
 
         return result;
-    }, [selectedMateria, selectedCatedra, selectedTime]);
+    }, [selectedMateria, selectedCatedra, selectedTime, comisiones]);
 
     const clearFilters = () => {
         setSelectedMateria('');
@@ -99,7 +100,7 @@ export function SearchPage() {
                                         }}
                                     >
                                         <option value="">Todas las materias</option>
-                                        {MATERIAS.map(m => (
+                                        {materias.map(m => (
                                             <option key={m.id} value={m.id}>{m.nombre}</option>
                                         ))}
                                     </select>

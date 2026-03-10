@@ -1,38 +1,27 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
+import { useQuery } from 'convex/react';
 import { Button } from '../ui/button';
-import { User, Mail, Phone, ShieldCheck, MessageSquare, CheckCircle } from 'lucide-react';
+import { User, ShieldCheck, MessageSquare, CheckCircle } from 'lucide-react';
 import type { ExchangeRequest } from '../../types';
+import { usersGetVisibleProfile } from '../../convex/functions';
 
 interface ContactStudentModalProps {
     isOpen: boolean;
     onClose: () => void;
     onStartChat: () => void;
     onConfirm: () => void;
+    onViewProfile: () => void;
+    peerUserId?: string;
+    peerName: string;
     request: ExchangeRequest | null;
 }
 
-export function ContactStudentModal({ isOpen, onClose, onStartChat, onConfirm, request }: ContactStudentModalProps) {
+export function ContactStudentModal({ isOpen, onClose, onStartChat, onConfirm, onViewProfile, peerUserId, peerName, request }: ContactStudentModalProps) {
+    const visibleProfile = useQuery(
+        usersGetVisibleProfile,
+        request && peerUserId ? { targetUserId: peerUserId } : "skip",
+    );
     if (!request) return null;
-
-    // Mock data for the matched student - In a real app this would come from the match object
-    const matchedStudent = {
-        name: 'Martina Rodríguez',
-        email: 'martina.rod@alumno.unlp.edu.ar',
-        phone: '+5492215550123',
-        legajo: '12345/6'
-    };
-
-    const handleWhatsApp = () => {
-        const message = `Hola ${matchedStudent.name}! Vi que tenemos un Match en la Plataforma JurSoc para permutar en la materia...`;
-        const url = `https://wa.me/${matchedStudent.phone.replace('+', '')}?text=${encodeURIComponent(message)}`;
-        window.open(url, '_blank');
-    };
-
-    const handleEmail = () => {
-        const subject = 'Permuta Plataforma JurSoc - Match Confirmado';
-        const body = `Hola ${matchedStudent.name},\n\nVi que hicimos match para permutar comisiones. ¿Te parece si coordinamos para realizar el cambio administrativo?`;
-        window.open(`mailto:${matchedStudent.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
-    };
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -41,9 +30,9 @@ export function ContactStudentModal({ isOpen, onClose, onStartChat, onConfirm, r
                     <div className="mx-auto bg-emerald-100 p-3 rounded-full mb-4">
                         <User className="h-8 w-8 text-emerald-600" />
                     </div>
-                    <DialogTitle className="text-center text-xl">¡Contactar a {matchedStudent.name}!</DialogTitle>
+                    <DialogTitle className="text-center text-xl">Perfil y contacto de {peerName}</DialogTitle>
                     <DialogDescription className="text-center">
-                        Han coincidido en sus preferencias de comisión.
+                        Ya hubo match entre ustedes. Podés chatear, revisar su reputación y luego confirmar la permuta.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -51,23 +40,24 @@ export function ContactStudentModal({ isOpen, onClose, onStartChat, onConfirm, r
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
                         <div className="flex items-center text-sm">
                             <ShieldCheck className="w-4 h-4 text-emerald-500 mr-2" />
-                            <span className="text-slate-600 font-medium">Identidad Verificada (Legajo {matchedStudent.legajo})</span>
+                            <span className="text-slate-600 font-medium">Solo se muestra reputación y datos permitidos.</span>
+                        </div>
+                        <div className="text-sm text-slate-600">
+                            Reputación: <span className="font-semibold">{(visibleProfile?.profile.reputation ?? 0).toFixed(1)}</span>
+                            {' '}sobre {visibleProfile?.profile.reviewsCount ?? 0} reseñas.
                         </div>
                         <div className="text-xs text-slate-400">
-                            Recuerda que el cambio administrativo deben realizarlo personalmente en la facultad.
+                            El correo electrónico del otro usuario no se expone a terceros desde esta vista.
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-3">
-                        <Button onClick={handleWhatsApp} className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white border-0 shadow-lg shadow-[#25D366]/20">
-                            <Phone className="mr-2 h-4 w-4" /> WhatsApp
-                        </Button>
                         <div className="grid grid-cols-2 gap-3">
                             <Button onClick={onStartChat} className="w-full bg-primary-600 hover:bg-primary-700 text-white shadow-lg shadow-primary-500/20">
                                 <MessageSquare className="mr-2 h-4 w-4" /> Chatear
                             </Button>
-                            <Button onClick={handleEmail} variant="outline" className="w-full">
-                                <Mail className="mr-2 h-4 w-4" /> Email
+                            <Button onClick={onViewProfile} variant="outline" className="w-full">
+                                <User className="mr-2 h-4 w-4" /> Ver perfil
                             </Button>
                         </div>
                         <Button onClick={() => { onClose(); onConfirm(); }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20">

@@ -1,15 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useProfessors } from '../../context/ProfessorsContext';
 import type { Professor, RankingContextType } from '../../context/ProfessorsContext';
-import { MATERIAS, CATEDRAS } from '../../data/mock';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Trophy, Swords, SkipForward, Info, BookOpen, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { useCatalog } from '../../context/CatalogContext';
 
 export function EloTrainingPage() {
     const { getTwoRandomProfessors, vote } = useProfessors();
+    const { materias, catedras } = useCatalog();
     const navigate = useNavigate();
 
     // Voting Context State
@@ -28,8 +29,8 @@ export function EloTrainingPage() {
     // Derived Data
     const filteredCatedras = useMemo(() => {
         if (selectedSubjectId === 'all') return [];
-        return CATEDRAS.filter(c => c.materiaId === selectedSubjectId);
-    }, [selectedSubjectId]);
+        return catedras.filter(c => c.materiaId === selectedSubjectId);
+    }, [selectedSubjectId, catedras]);
 
     const isContextReady = useMemo(() => {
         if (votingMode === 'general') return true;
@@ -64,9 +65,9 @@ export function EloTrainingPage() {
     // Initial Load & Filter Changes
     useEffect(() => {
         loadNewPair();
-    }, [votingMode, selectedSubjectId, selectedCatedraId, selectedRole]); // eslint-disable-line
+    }, [votingMode, selectedSubjectId, selectedCatedraId, selectedRole]);
 
-    const handleVote = (winner: Professor, loser: Professor) => {
+    const handleVote = async (winner: Professor, loser: Professor) => {
         if (animating) return;
         setAnimating(true);
         setLastWinnerId(winner.id);
@@ -78,7 +79,7 @@ export function EloTrainingPage() {
         if (votingMode === 'catedra') contextId = selectedCatedraId;
 
         // Execute Vote
-        const result = vote(winner.id, loser.id, { type: votingMode, id: contextId });
+        const result = await vote(winner.id, loser.id, { type: votingMode, id: contextId });
         if (!result.ok) {
             setAnimating(false);
             setLastWinnerId(null);
@@ -108,7 +109,7 @@ export function EloTrainingPage() {
     };
 
     return (
-        <div className="max-w-6xl mx-auto py-4 md:py-8 px-3 sm:px-4 animate-in fade-in duration-700">
+        <div className="max-w-6xl mx-auto py-4 md:py-8 px-3 sm:px-4 animate-in fade-in duration-700 pb-28 sm:pb-32">
             {/* Header */}
             <div className="text-center mb-6 md:mb-10 space-y-3 md:space-y-4">
                 <div className="inline-flex items-center justify-center p-2 md:p-3 bg-indigo-100 rounded-full mb-2">
@@ -168,7 +169,7 @@ export function EloTrainingPage() {
                                     onChange={handleSubjectChange}
                                 >
                                     <option value="all">Seleccionar Materia...</option>
-                                    {MATERIAS.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                                    {materias.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                                 </select>
                             )}
 
@@ -195,8 +196,6 @@ export function EloTrainingPage() {
                                 <option value="all">Todos los Roles</option>
                                 <option value="Titular">Titulares</option>
                                 <option value="Adjunto">Adjuntos</option>
-                                <option value="JTP">JTP</option>
-                                <option value="Auxiliar">Auxiliares</option>
                             </select>
                         </div>
                     </div>
@@ -290,8 +289,8 @@ export function EloTrainingPage() {
                         <Info className="w-3 h-3" />
                         Votando en: <span className="font-bold text-indigo-400">
                             {votingMode === 'general' ? 'General' :
-                                votingMode === 'subject' ? MATERIAS.find(m => m.id === selectedSubjectId)?.nombre :
-                                    CATEDRAS.find(c => c.id === selectedCatedraId)?.nombre}
+                                votingMode === 'subject' ? materias.find(m => m.id === selectedSubjectId)?.nombre :
+                                    catedras.find(c => c.id === selectedCatedraId)?.nombre}
                         </span>
                     </div>
                 </>
@@ -340,11 +339,9 @@ function ProfessorBattleCard({
 
                 {/* New Role Badge */}
                 <div className="flex justify-center mb-2 min-h-6">
-                    {professor.roles?.map(r => (
-                        <span key={r} className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 uppercase tracking-wider font-bold">
-                            {r}
-                        </span>
-                    ))}
+                    <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 uppercase tracking-wider font-bold">
+                        {professor.role}
+                    </span>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 md:gap-2 justify-center mb-4 md:mb-6 min-h-8">

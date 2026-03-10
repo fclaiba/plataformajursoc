@@ -1,4 +1,4 @@
-﻿import type { ExchangeRequest } from '../types';
+import type { ExchangeRequest } from '../types';
 
 const TERMINAL_STATUSES = new Set(['CONFIRMED', 'CANCELLED', 'COMPLETED']);
 

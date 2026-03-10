@@ -10,11 +10,14 @@ export default defineSchema({
     role: v.optional(v.union(v.literal("student"), v.literal("admin"))),
     reputation: v.optional(v.number()),
     reviewsCount: v.optional(v.number()),
+    approvedSubjectExternalIds: v.optional(v.array(v.string())),
+    documentUrls: v.optional(v.array(v.string())),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
   subjects: defineTable({
+    externalId: v.string(),
     code: v.string(),
     name: v.string(),
     year: v.number(),
@@ -22,16 +25,22 @@ export default defineSchema({
     active: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_code", ["code"]),
+  })
+    .index("by_code", ["code"])
+    .index("by_external", ["externalId"]),
 
   cathedras: defineTable({
+    externalId: v.string(),
     subjectId: v.id("subjects"),
     name: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_subject", ["subjectId"]),
+  })
+    .index("by_subject", ["subjectId"])
+    .index("by_external", ["externalId"]),
 
   commissions: defineTable({
+    externalId: v.string(),
     subjectId: v.id("subjects"),
     cathedraId: v.id("cathedras"),
     number: v.number(),
@@ -49,7 +58,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_subject", ["subjectId"])
-    .index("by_cathedra", ["cathedraId"]),
+    .index("by_cathedra", ["cathedraId"])
+    .index("by_external", ["externalId"]),
 
   enrollments: defineTable({
     userId: v.id("users"),
@@ -95,13 +105,42 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_request", ["requestId"]),
 
+  operationalLogs: defineTable({
+    domain: v.string(),
+    level: v.union(v.literal("info"), v.literal("warning"), v.literal("error")),
+    message: v.string(),
+    metadata: v.optional(v.any()),
+    actorUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+  }).index("by_domain", ["domain"]),
+
+  matchingJobs: defineTable({
+    subjectId: v.id("subjects"),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("done"),
+      v.literal("failed"),
+    ),
+    attempts: v.number(),
+    nextRunAt: v.number(),
+    runToken: v.optional(v.string()),
+    lastError: v.optional(v.string()),
+    lastMatchedPairs: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_subject", ["subjectId"]),
+
   threads: defineTable({
+    pairKey: v.optional(v.string()),
     requestId: v.id("requests"),
     userAId: v.id("users"),
     userBId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_request", ["requestId"]),
+  })
+    .index("by_request", ["requestId"])
+    .index("by_pair_key", ["pairKey"]),
 
   messages: defineTable({
     threadId: v.id("threads"),
@@ -110,11 +149,24 @@ export default defineSchema({
     content: v.string(),
     type: v.union(v.literal("text"), v.literal("image")),
     mediaUrl: v.optional(v.string()),
+    mediaStorageId: v.optional(v.id("_storage")),
     readAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_thread", ["threadId"])
     .index("by_request", ["requestId"]),
+
+  subjectResources: defineTable({
+    subjectExternalId: v.string(),
+    category: v.union(v.literal("biblio"), v.literal("apuntes"), v.literal("resumenes")),
+    title: v.string(),
+    author: v.optional(v.string()),
+    type: v.union(v.literal("pdf"), v.literal("link"), v.literal("video")),
+    url: v.string(),
+    size: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_subject_category", ["subjectExternalId", "category"]),
 
   notifications: defineTable({
     userId: v.id("users"),
@@ -124,6 +176,15 @@ export default defineSchema({
     source: v.optional(v.union(v.literal("auth"), v.literal("requests"), v.literal("chat"), v.literal("ranking"), v.literal("system"))),
     readAt: v.optional(v.number()),
     createdAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  supportReports: defineTable({
+    userId: v.id("users"),
+    category: v.union(v.literal("bug"), v.literal("abuse"), v.literal("support")),
+    message: v.string(),
+    status: v.union(v.literal("open"), v.literal("reviewed"), v.literal("closed")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
   reviews: defineTable({
@@ -142,9 +203,11 @@ export default defineSchema({
     roles: v.array(v.string()),
     subjectIds: v.array(v.id("subjects")),
     cathedraIds: v.array(v.id("cathedras")),
+    subjectExternalIds: v.array(v.string()),
+    cathedraExternalIds: v.array(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }),
+  }).index("by_name", ["name"]),
 
   votes: defineTable({
     voterUserId: v.id("users"),

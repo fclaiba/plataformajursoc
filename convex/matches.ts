@@ -1,6 +1,7 @@
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { now } from "./utils";
+import { selectBestPairs } from "./matchingEngine";
 
 const preferenceRank = (
   request: {
@@ -15,7 +16,9 @@ export const runMatching = async (ctx: MutationCtx, subjectId: Id<"subjects">) =
     .withIndex("by_subject_status", (q) => q.eq("subjectId", subjectId).eq("status", "PENDING"))
     .collect();
 
-  const candidates: Array<{ a: typeof open[number]; b: typeof open[number]; score: number }> = [];
+  const requestById = new Map(open.map((request) => [String(request._id), request]));
+  const requestIds = open.map((request) => String(request._id));
+  const candidateEdges: Array<{ left: string; right: string; score: number }> = [];
   for (let i = 0; i < open.length; i++) {
     for (let j = i + 1; j < open.length; j++) {
       const a = open[i];
@@ -25,42 +28,51 @@ export const runMatching = async (ctx: MutationCtx, subjectId: Id<"subjects">) =
       const aWantsB = preferenceRank(a, b.commissionOriginId);
       const bWantsA = preferenceRank(b, a.commissionOriginId);
       if (!Number.isFinite(aWantsB) || !Number.isFinite(bWantsA)) continue;
-      candidates.push({ a, b, score: aWantsB + bWantsA });
+      candidateEdges.push({ left: String(a._id), right: String(b._id), score: aWantsB + bWantsA });
     }
   }
 
-  candidates.sort((x, y) => x.score - y.score);
-  const used = new Set<string>();
+  const selected = selectBestPairs(requestIds, candidateEdges);
 
-  for (const c of candidates) {
-    if (used.has(c.a._id) || used.has(c.b._id)) continue;
-    await ctx.db.patch(c.a._id, {
+  for (const [leftId, rightId] of selected.pairs) {
+    const left = requestById.get(leftId);
+    const right = requestById.get(rightId);
+    if (!left || !right) continue;
+
+    // Re-read before patching to keep application idempotent and race-safe.
+    const latestLeft = await ctx.db.get(left._id);
+    const latestRight = await ctx.db.get(right._id);
+    if (!latestLeft || !latestRight) continue;
+    if (latestLeft.status !== "PENDING" || latestRight.status !== "PENDING") continue;
+    if (latestLeft.matchedRequestId || latestRight.matchedRequestId) continue;
+
+    await ctx.db.patch(left._id, {
       status: "MATCHED",
-      matchedRequestId: c.b._id,
+      matchedRequestId: right._id,
       finalizedBy: [],
       updatedAt: now(),
     });
-    await ctx.db.patch(c.b._id, {
+    await ctx.db.patch(right._id, {
       status: "MATCHED",
-      matchedRequestId: c.a._id,
+      matchedRequestId: left._id,
       finalizedBy: [],
       updatedAt: now(),
     });
     await ctx.db.insert("requestEvents", {
-      requestId: c.a._id,
+      requestId: left._id,
       actorUserId: undefined,
       type: "MATCH_FOUND",
-      payload: { counterpart: c.b._id },
+      payload: { counterpart: right._id, strategy: "max_pairs_then_priority" },
       createdAt: now(),
     });
     await ctx.db.insert("requestEvents", {
-      requestId: c.b._id,
+      requestId: right._id,
       actorUserId: undefined,
       type: "MATCH_FOUND",
-      payload: { counterpart: c.a._id },
+      payload: { counterpart: left._id, strategy: "max_pairs_then_priority" },
       createdAt: now(),
     });
-    used.add(c.a._id);
-    used.add(c.b._id);
   }
+
+  return { matchedPairs: selected.pairCount };
 };

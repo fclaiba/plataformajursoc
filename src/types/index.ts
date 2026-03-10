@@ -8,6 +8,7 @@ export interface User {
     id: string;
     name: string;
     email: string;
+    role?: 'student' | 'admin';
     reputation?: number; // 0-5
     reviewsCount?: number;
     reviews?: Review[];
@@ -62,7 +63,7 @@ export interface Comision {
 }
 
 export interface Horario {
-    dia: 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
+    dia: 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes' | 'Sábado';
     inicio: string;
     fin: string;
 }

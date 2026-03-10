@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { MATERIAS, CATEDRAS, COMISIONES } from '../../data/mock';
+import { useCatalog } from '../../context/CatalogContext';
 import { Button } from '../ui/button';
 import { X, Search, Check, BookOpen, GraduationCap, Users } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -13,6 +13,7 @@ interface AddSubjectModalProps {
 
 export function AddSubjectModal({ isOpen, onClose }: AddSubjectModalProps) {
     const { addEnrollment, user } = useAuth();
+    const { materias, catedras, comisiones } = useCatalog();
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedMateriaId, setSelectedMateriaId] = useState<string | null>(null);
@@ -22,23 +23,23 @@ export function AddSubjectModal({ isOpen, onClose }: AddSubjectModalProps) {
 
     // Filtered materias
     const filteredMaterias = useMemo(() => {
-        if (!searchQuery) return MATERIAS;
-        return MATERIAS.filter(m =>
+        if (!searchQuery) return materias;
+        return materias.filter(m =>
             m.nombre.toLowerCase().includes(searchQuery.toLowerCase())
         );
-    }, [searchQuery]);
+    }, [searchQuery, materias]);
 
     // Available Catedras for selected Materia
     const availableCatedras = useMemo(() => {
         if (!selectedMateriaId) return [];
-        return CATEDRAS.filter(c => c.materiaId === selectedMateriaId);
-    }, [selectedMateriaId]);
+        return catedras.filter(c => c.materiaId === selectedMateriaId);
+    }, [selectedMateriaId, catedras]);
 
     // Available Comisiones for selected Catedra
     const availableComisiones = useMemo(() => {
         if (!selectedCatedraId) return [];
-        return COMISIONES.filter(c => c.catedraId === selectedCatedraId);
-    }, [selectedCatedraId]);
+        return comisiones.filter(c => c.catedraId === selectedCatedraId);
+    }, [selectedCatedraId, comisiones]);
 
     const handleNext = () => {
         if (step === 1 && selectedMateriaId) setStep(2);
@@ -50,10 +51,10 @@ export function AddSubjectModal({ isOpen, onClose }: AddSubjectModalProps) {
         else if (step === 3) setStep(2);
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (selectedMateriaId && selectedCatedraId && selectedComisionId) {
             try {
-                addEnrollment(selectedMateriaId, selectedCatedraId, selectedComisionId);
+                await addEnrollment(selectedMateriaId, selectedCatedraId, selectedComisionId);
                 onClose();
                 // Reset state
                 setStep(1);

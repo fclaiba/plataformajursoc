@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from 'convex/react';
 import ReactFlow, {
     useEdgesState,
     addEdge,
@@ -20,6 +21,7 @@ import { Button } from '../../components/ui/button';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { cn } from '../../lib/utils';
 import { SubjectResourcesModal } from '../../components/subjects/SubjectResourcesModal';
+import { correlativesGetMap } from '../../convex/functions';
 
 // Layout Configuration
 const nodeWidth = 200;
@@ -146,20 +148,25 @@ const getNodeDetails = (n: NodeDefinition, userEnrollments: any[], approvedSubje
 
 export function CorrelativesMapPage() {
     const { user, toggleApproved } = useAuth();
+    const correlativesMap = useQuery(correlativesGetMap, {});
     const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
     const [selectedResourceSubject, setSelectedResourceSubject] = useState<{ id: string; nombre: string } | null>(null);
+    const nodeTypes = useMemo(() => ({}), []);
+    const edgeTypes = useMemo(() => ({}), []);
+    const correlativesNodes = (correlativesMap?.nodes as NodeDefinition[] | undefined) || CORRELATIVES_NODES;
+    const correlativesEdges = correlativesMap?.edges || CORRELATIVES_EDGES;
 
     // 1. Calculate Layout ONE time (memoized structure)
     const { nodes: staticBaseNodes, edges: staticEdges } = useMemo(() => {
-        const baseNodes = CORRELATIVES_NODES.map(n => ({ id: n.id, data: { label: n.label } })); // Minimal node def for layout
+        const baseNodes = correlativesNodes.map(n => ({ id: n.id, data: { label: n.label } })); // Minimal node def for layout
         // @ts-ignore
-        return getLayoutedElements(baseNodes, mapEdges(CORRELATIVES_EDGES).map(e => ({ ...e, id: e.id }))); // Passed as Edge[]
-    }, []);
+        return getLayoutedElements(baseNodes, mapEdges(correlativesEdges).map(e => ({ ...e, id: e.id }))); // Passed as Edge[]
+    }, [correlativesNodes, correlativesEdges]);
 
     // 2. Merge User State into Nodes (memoized)
     const nodes = useMemo(() => {
         return staticBaseNodes.map((ln) => {
-            const def = CORRELATIVES_NODES.find(n => n.id === ln.id);
+            const def = correlativesNodes.find(n => n.id === ln.id);
             if (!def) return ln;
 
             const details = getNodeDetails(def, user?.enrollments || [], user?.approvedSubjects || []);
@@ -214,13 +221,13 @@ export function CorrelativesMapPage() {
 
     // List View Logic: Group by Level/Year
     const subjectsByLevel = useMemo(() => {
-        const grouped: Record<number, typeof CORRELATIVES_NODES> = {};
-        CORRELATIVES_NODES.forEach(n => {
+        const grouped: Record<number, typeof correlativesNodes> = {};
+        correlativesNodes.forEach(n => {
             if (!grouped[n.level]) grouped[n.level] = [];
             grouped[n.level].push(n);
         });
         return grouped;
-    }, []);
+    }, [correlativesNodes]);
 
     const renderListView = () => (
         <ScrollArea className="h-full w-full bg-slate-50 p-6">
@@ -289,22 +296,6 @@ export function CorrelativesMapPage() {
                                                 <BookOpen className="w-4 h-4" />
                                             </Button>
 
-                                            {/* Resources Button */}
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className={cn(
-                                                    "absolute bottom-2 right-2 h-8 w-8 p-0 rounded-full transition-all opacity-0 group-hover:opacity-100",
-                                                    isApproved ? "text-white hover:bg-white/20" : "text-slate-400 hover:text-primary-600 hover:bg-primary-50"
-                                                )}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedResourceSubject({ id: n.materiaId || n.id, nombre: n.label });
-                                                }}
-                                                title="Ver Material de Estudio"
-                                            >
-                                                <BookOpen className="w-4 h-4" />
-                                            </Button>
                                         </div>
                                     );
                                 })}
@@ -382,6 +373,8 @@ export function CorrelativesMapPage() {
                     <ReactFlow
                         nodes={nodes}
                         edges={edges}
+                        nodeTypes={nodeTypes}
+                        edgeTypes={edgeTypes}
                         onEdgesChange={onEdgesChange}
                         onConnect={onConnect}
                         onNodeClick={onNodeClick}

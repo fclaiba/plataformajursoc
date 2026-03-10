@@ -1,67 +1,84 @@
 import { useState } from 'react';
+import { useQuery } from 'convex/react';
 import { useRequests } from '../../context/RequestsContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { BadgeCheck, Clock, XCircle, CheckCircle, ArrowRightLeft, User, RefreshCw, MessageSquare } from 'lucide-react';
+import { BadgeCheck, Clock, XCircle, CheckCircle, ArrowRightLeft, User, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { MATERIAS } from '../../data/mock';
 import { cn } from '../../lib/utils';
 import { ChatWindow } from '../../components/chat/ChatWindow';
 import { ReviewModal } from '../../components/reviews/ReviewModal';
 import { StarRating } from '../../components/reviews/StarRating';
 import { ContactStudentModal } from '../../components/requests/ContactStudentModal';
 import type { ExchangeRequest } from '../../types';
+import { useCatalog } from '../../context/CatalogContext';
+import { reviewsListByReviewer } from '../../convex/functions';
 
 export function MyRequestsPage() {
     const { user, submitReview } = useAuth(); // Need user ID
-    const { requests, myRequests, createMatchingRequest, cancelRequest, finalizeRequest, completeRequest } = useRequests();
+    const { materias } = useCatalog();
+    const { requests, myRequests, cancelRequest, finalizeRequest } = useRequests();
     const { addNotification } = useNotifications();
     const navigate = useNavigate();
     const [selectedRequest, setSelectedRequest] = useState<ExchangeRequest | null>(null);
+    const [selectedPeer, setSelectedPeer] = useState<{ id: string; name: string } | null>(null);
     const [isContactModalOpen, setIsContactModalOpen] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [isReviewOpen, setIsReviewOpen] = useState(false);
-
-    // Mock matched user (consistent with ContactModal)
-    const MATCHED_USER = {
-        id: 'user-martina',
-        name: 'Martina Rodríguez'
-    };
-
-
-    const handleSimulateMatch = () => {
-        const pending = myRequests.find(r => r.status === 'PENDING');
-        if (pending) {
-            createMatchingRequest(pending.id);
-        }
-    };
+    const reviewerReviews = useQuery(
+        reviewsListByReviewer,
+        user?.id ? { reviewerUserId: user.id } : "skip",
+    ) || [];
+    const reviewedRequestIds = new Set(reviewerReviews.map((row) => row.requestId));
 
     const handleContact = (request: ExchangeRequest) => {
+        const matchedRequest = requests.find((r) => r.id === request.matchedRequestId);
+        if (!matchedRequest?.userId) {
+            addNotification('Aún sin contraparte', 'Esta solicitud todavía no tiene usuario emparejado.', 'warning');
+            return;
+        }
+        setSelectedPeer({ id: matchedRequest.userId, name: `Estudiante ${matchedRequest.userId.slice(0, 6)}` });
         setSelectedRequest(request);
         setIsContactModalOpen(true);
     };
 
     const handleChat = (request: ExchangeRequest) => {
+        const matchedRequest = requests.find((r) => r.id === request.matchedRequestId);
+        if (!matchedRequest?.userId) {
+            addNotification('Aún sin contraparte', 'Esta solicitud todavía no tiene usuario emparejado.', 'warning');
+            return;
+        }
+        setSelectedPeer({ id: matchedRequest.userId, name: `Estudiante ${matchedRequest.userId.slice(0, 6)}` });
         setSelectedRequest(request);
         setIsChatOpen(true);
     };
 
-    const handleEndExchange = () => {
-        setIsChatOpen(false);
-        setIsReviewOpen(true);
+    const handleViewProfile = (userId?: string) => {
+        if (!userId) {
+            addNotification('Perfil no disponible', 'No se pudo identificar al otro usuario.', 'warning');
+            return;
+        }
+        navigate(`/users/${userId}`);
     };
 
-    const handleSubmitReview = (rating: number, comment: string) => {
-        if (selectedRequest) {
-            const matchedRequest = requests.find((request) => request.id === selectedRequest.matchedRequestId);
-            const targetUserId = matchedRequest?.userId || MATCHED_USER.id;
-            submitReview(targetUserId, rating, comment, selectedRequest.id);
-            completeRequest(selectedRequest.id);
+    const handleSubmitReview = async (rating: number, comment: string) => {
+        if (!selectedRequest) return;
+        const matchedRequest = requests.find((request) => request.id === selectedRequest.matchedRequestId);
+        const targetUserId = matchedRequest?.userId || selectedPeer?.id;
+        if (!targetUserId) {
+            addNotification('No se pudo enviar la reseña', 'No se encontró la contraparte de la permuta.', 'warning');
+            return;
         }
-        setIsReviewOpen(false);
-        addNotification('¡Permuta Completada!', 'Gracias por calificar tu experiencia.', 'success');
+        try {
+            await submitReview(targetUserId, rating, comment, selectedRequest.id);
+            setIsReviewOpen(false);
+            addNotification('¡Reseña enviada!', 'Gracias por calificar tu experiencia.', 'success');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo enviar la reseña.';
+            addNotification('No se pudo enviar la reseña', message, 'warning');
+        }
     };
 
 
@@ -80,6 +97,12 @@ export function MyRequestsPage() {
                         <CheckCircle className="w-4 h-4 mr-1.5" /> Confirmada
                     </span>
                 );
+            case 'COMPLETED':
+                return (
+                    <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-full flex items-center shadow-sm border border-indigo-200">
+                        <CheckCircle className="w-4 h-4 mr-1.5" /> Completada
+                    </span>
+                );
             case 'CANCELLED':
                 return (
                     <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1.5 rounded-full flex items-center shadow-sm border border-red-200">
@@ -95,10 +118,10 @@ export function MyRequestsPage() {
         }
     };
 
-    const getMateriaName = (id: string) => MATERIAS.find(m => m.id === id)?.nombre || id;
+    const getMateriaName = (id: string) => materias.find(m => m.id === id)?.nombre || id;
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-700">
+        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-700 pb-28 sm:pb-32">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-200 pb-6">
                 <div>
                     <h1 className="text-3xl font-bold flex items-center text-slate-900">
@@ -112,12 +135,7 @@ export function MyRequestsPage() {
                     </p>
                 </div>
 
-                {/* Only show button if there are pending requests */}
-                {myRequests.some(r => r.status === 'PENDING') && (
-                    <Button onClick={handleSimulateMatch} variant="outline" size="sm" className="bg-white/80 hover:bg-white shadow-sm border-primary-200 text-primary-700 hover:text-primary-800">
-                        <RefreshCw className="mr-2 h-4 w-4" /> Simular Match (Demo)
-                    </Button>
-                )}
+                <div />
             </div>
 
             <div className="space-y-6">
@@ -206,7 +224,17 @@ export function MyRequestsPage() {
                                                                 </Button>
                                                             </div>
                                                             <Button
-                                                                onClick={() => finalizeRequest(req.id)}
+                                                                onClick={() => {
+                                                                    const matchedRequest = requests.find((request) => request.id === req.matchedRequestId);
+                                                                    handleViewProfile(matchedRequest?.userId);
+                                                                }}
+                                                                variant="outline"
+                                                                className="w-full mt-2 border-slate-200 text-slate-700 hover:bg-slate-50"
+                                                            >
+                                                                <User className="w-4 h-4 mr-2" /> Ver perfil
+                                                            </Button>
+                                                            <Button
+                                                                onClick={() => void finalizeRequest(req.id)}
                                                                 className="w-full mt-2 bg-emerald-700 hover:bg-emerald-800 text-white"
                                                             >
                                                                 <CheckCircle className="w-4 h-4 mr-2" /> Confirmar Intercambio
@@ -214,29 +242,50 @@ export function MyRequestsPage() {
                                                         </>
                                                     )}
                                                 </div>
-                                            ) : req.status === 'CONFIRMED' ? (
-                                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center space-y-3 animate-in fade-in zoom-in">
-                                                    <p className="text-blue-800 font-bold flex items-center justify-center">
+                                            ) : req.status === 'COMPLETED' ? (
+                                                <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center space-y-3 animate-in fade-in zoom-in">
+                                                    <p className="text-indigo-800 font-bold flex items-center justify-center">
                                                         <CheckCircle className="w-5 h-5 mr-2" />
                                                         ¡Permuta Completada!
                                                     </p>
-                                                    <p className="text-xs text-blue-600">Ambos confirmaron el intercambio.</p>
-                                                    <Button
-                                                        onClick={() => {
-                                                            setSelectedRequest(req);
-                                                            setIsReviewOpen(true);
-                                                        }}
-                                                        className="w-full bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 border-0"
-                                                    >
-                                                        <StarRating rating={1} size="sm" className="mr-2 text-blue-200" /> Calificar Experiencia
-                                                    </Button>
+                                                    <p className="text-xs text-indigo-600">Ambos confirmaron el intercambio. Ya podés dejar tu reseña.</p>
+                                                    {reviewedRequestIds.has(req.id) ? (
+                                                        <Button
+                                                            disabled
+                                                            className="w-full bg-emerald-600/90 text-white border-0 cursor-not-allowed"
+                                                        >
+                                                            <CheckCircle className="w-4 h-4 mr-2" /> Reseña enviada
+                                                        </Button>
+                                                    ) : (
+                                                        <Button
+                                                            onClick={() => {
+                                                                const matchedRequest = requests.find((request) => request.id === req.matchedRequestId);
+                                                                if (matchedRequest?.userId) {
+                                                                    setSelectedPeer({ id: matchedRequest.userId, name: `Estudiante ${matchedRequest.userId.slice(0, 6)}` });
+                                                                }
+                                                                setSelectedRequest(req);
+                                                                setIsReviewOpen(true);
+                                                            }}
+                                                            className="w-full bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 border-0"
+                                                        >
+                                                            <StarRating rating={1} size="sm" className="mr-2 text-indigo-200" /> Calificar Experiencia
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            ) : req.status === 'CONFIRMED' ? (
+                                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center space-y-3 animate-in fade-in zoom-in">
+                                                    <p className="text-blue-800 font-bold flex items-center justify-center">
+                                                        <Clock className="w-5 h-5 mr-2" />
+                                                        Confirmada
+                                                    </p>
+                                                    <p className="text-xs text-blue-600">Cierre automático en curso (se completa cuando ambas confirmaciones se sincronizan).</p>
                                                 </div>
                                             ) : (
                                                 <div className="text-center py-2">
                                                     <p className="text-sm text-slate-400 italic mb-4">
                                                         Estamos buscando compañeros compatibles con tu solicitud...
                                                     </p>
-                                                    <Button variant="outline" size="sm" className="w-full text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50" onClick={() => cancelRequest(req.id)}>
+                                                    <Button variant="outline" size="sm" className="w-full text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50" onClick={() => void cancelRequest(req.id)}>
                                                         Cancelar Solicitud
                                                     </Button>
                                                 </div>
@@ -258,19 +307,21 @@ export function MyRequestsPage() {
                     setIsChatOpen(true);
                 }}
                 onConfirm={() => {
-                    if (selectedRequest) finalizeRequest(selectedRequest.id);
+                    if (selectedRequest) void finalizeRequest(selectedRequest.id);
                     setIsContactModalOpen(false);
                 }}
+                onViewProfile={() => handleViewProfile(selectedPeer?.id)}
+                peerUserId={selectedPeer?.id}
+                peerName={selectedPeer?.name || 'Estudiante'}
                 request={selectedRequest}
             />
 
             {selectedRequest && isChatOpen && (
                 <ChatWindow
-                    receiverId={MATCHED_USER.id}
-                    receiverName={MATCHED_USER.name}
+                    receiverName={selectedPeer?.name || 'Estudiante'}
+                    receiverUserId={selectedPeer?.id}
                     requestId={selectedRequest.id}
                     onClose={() => setIsChatOpen(false)}
-                    onEndExchange={handleEndExchange}
                 />
             )}
 
@@ -278,7 +329,7 @@ export function MyRequestsPage() {
                 isOpen={isReviewOpen}
                 onClose={() => setIsReviewOpen(false)}
                 onSubmit={(rating, comment) => handleSubmitReview(rating, comment)}
-                targetName={MATCHED_USER.name}
+                targetName={selectedPeer?.name || 'Estudiante'}
             />
         </div>
     );

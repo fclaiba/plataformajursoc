@@ -1,4 +1,4 @@
-﻿type TimeSlot = { dia: string; inicio: string; fin: string };
+type TimeSlot = { dia: string; inicio: string; fin: string };
 
 export const toMinutes = (hourText: string) => {
   const [hours, minutes] = hourText.split(':').map(Number);

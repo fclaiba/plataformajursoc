@@ -24,6 +24,7 @@ export function StarRating({ rating, onRatingChange, readonly = false, size = 'm
             {[1, 2, 3, 4, 5].map((star) => (
                 <button
                     key={star}
+                    data-testid={`star-rating-${star}`}
                     type="button"
                     onClick={() => !readonly && onRatingChange?.(star)}
                     onMouseEnter={() => !readonly && setHoverRating(star)}

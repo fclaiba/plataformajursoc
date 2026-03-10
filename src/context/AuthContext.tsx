@@ -2,23 +2,32 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { useConvexAuth, useQuery, useMutation } from 'convex/react';
 import { useAuthActions } from '@convex-dev/auth/react';
 import type { User } from '../types';
-import { COMISIONES } from '../data/mock';
-import { CORRELATIVES_NODES, CORRELATIVES_EDGES } from '../data/correlativas';
-import { useNotifications } from './NotificationsContext';
 import { hasEnrollmentConflict } from '../domain/scheduleRules';
-import { usersEnsureCurrentProfile, usersGetMe } from '../convex/functions';
+import { useCatalog } from './CatalogContext';
+import {
+    correlativesGetMap,
+    reviewsCreate,
+    subjectsAddEnrollmentByExternal,
+    subjectsListEnrollmentsByUser,
+    subjectsRemoveEnrollmentByExternal,
+    usersAddDocument,
+    usersEnsureCurrentProfile,
+    usersGetMe,
+    usersToggleApprovedSubject,
+} from '../convex/functions';
 
 interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
+    isAdmin: boolean;
     login: (email: string, password: string) => Promise<boolean>;
     register: (name: string, email: string, password: string) => Promise<{ success: boolean; message?: string }>;
     logout: () => void;
     addDocument: (docUrl: string) => void;
-    addEnrollment: (materiaId: string, catedraId: string, comisionId: string) => void;
-    removeEnrollment: (materiaId: string) => void;
+    addEnrollment: (materiaId: string, catedraId: string, comisionId: string) => Promise<void>;
+    removeEnrollment: (materiaId: string) => Promise<void>;
     toggleApproved: (materiaId: string) => void;
-    submitReview: (targetUserId: string, rating: number, comment: string, requestId: string) => void;
+    submitReview: (targetUserId: string, rating: number, comment: string, requestId: string) => Promise<void>;
     loading: boolean;
 }
 
@@ -27,22 +36,29 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { isAuthenticated: authSessionActive } = useConvexAuth();
     const { signIn, signOut } = useAuthActions();
+    const { comisiones } = useCatalog();
+    const correlativesMap = useQuery(correlativesGetMap, {});
     const me = useQuery(usersGetMe, {});
     const ensureCurrentProfile = useMutation(usersEnsureCurrentProfile);
-    const { addNotification } = useNotifications();
-    const [localUserPatch, setLocalUserPatch] = useState<Partial<User>>({});
+    const addEnrollmentByExternal = useMutation(subjectsAddEnrollmentByExternal);
+    const removeEnrollmentByExternal = useMutation(subjectsRemoveEnrollmentByExternal);
+    const createReview = useMutation(reviewsCreate);
+    const addDocumentMutation = useMutation(usersAddDocument);
+    const toggleApprovedSubjectMutation = useMutation(usersToggleApprovedSubject);
     const [patchedUserId, setPatchedUserId] = useState<string | null>(null);
     const [pendingProfileName, setPendingProfileName] = useState<string | undefined>(undefined);
+    const enrollments = useQuery(
+        subjectsListEnrollmentsByUser,
+        me?.user?._id ? { userId: me.user._id } : "skip"
+    );
 
     useEffect(() => {
         const authUserId = me?.user?._id ?? null;
         if (authUserId && authUserId !== patchedUserId) {
-            setLocalUserPatch({});
             setPatchedUserId(authUserId);
             return;
         }
         if (!authUserId && patchedUserId !== null) {
-            setLocalUserPatch({});
             setPatchedUserId(null);
         }
     }, [me?.user?._id, patchedUserId]);
@@ -70,37 +86,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: me.user.email || '',
             reputation: me.profile?.reputation ?? 0,
             reviewsCount: me.profile?.reviewsCount ?? 0,
-            enrollments: [],
-            approvedSubjects: [],
-            documents: [],
+            role: me.profile?.role ?? 'student',
+            enrollments: (enrollments || []).map((enrollment) => ({
+                materiaId: enrollment.materiaId,
+                catedraId: enrollment.catedraId,
+                comisionId: enrollment.comisionId,
+            })),
+            approvedSubjects: me.profile?.approvedSubjectExternalIds ?? [],
+            documents: me.profile?.documentUrls ?? [],
             reviews: [],
         };
-    }, [me]);
+    }, [me, enrollments]);
 
-    const user = useMemo<User | null>(() => {
-        if (!baseUser) return null;
-        return {
-            ...baseUser,
-            ...localUserPatch,
-            enrollments: localUserPatch.enrollments ?? baseUser.enrollments ?? [],
-            approvedSubjects: localUserPatch.approvedSubjects ?? baseUser.approvedSubjects ?? [],
-            documents: localUserPatch.documents ?? baseUser.documents ?? [],
-            reviews: localUserPatch.reviews ?? baseUser.reviews ?? [],
-        };
-    }, [baseUser, localUserPatch]);
-
-    const updateLocalUser = (updater: (current: User) => User) => {
-        if (!user) return;
-        const updated = updater(user);
-        setLocalUserPatch({
-            documents: updated.documents ?? [],
-            enrollments: updated.enrollments ?? [],
-            approvedSubjects: updated.approvedSubjects ?? [],
-            reviews: updated.reviews ?? [],
-            reputation: updated.reputation,
-            reviewsCount: updated.reviewsCount,
-        });
-    };
+    const user = baseUser;
 
     const login = async (email: string, password: string): Promise<boolean> => {
         const normalizedEmail = email.trim().toLowerCase();
@@ -144,38 +142,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logout = () => {
-        setLocalUserPatch({});
         setPatchedUserId(null);
         void signOut();
     };
 
     // Derived state
     const isAuthenticated = authSessionActive;
+    const isAdmin = user?.role === 'admin';
     const loading = false;
 
     const addDocument = (docUrl: string) => {
         if (!user) return;
-        updateLocalUser((current) => ({ ...current, documents: [...(current.documents || []), docUrl] }));
+        void addDocumentMutation({ url: docUrl });
     };
 
-    const addEnrollment = (materiaId: string, catedraId: string, comisionId: string) => {
+    const addEnrollment = async (materiaId: string, catedraId: string, comisionId: string) => {
         if (!user) return;
         // Check if already enrolled in this materia
         if (user.enrollments?.some(e => e.materiaId === materiaId)) {
             throw new Error('Ya estás inscripto en esta materia.');
         }
 
-        const selectedCommission = COMISIONES.find((commission) => commission.id === comisionId);
+        const selectedCommission = comisiones.find((commission) => commission.id === comisionId);
         if (!selectedCommission) {
             throw new Error('La comisión seleccionada no existe.');
         }
 
-        if (selectedCommission.cuposDisponibles <= 0) {
-            throw new Error('No hay cupos disponibles en esa comisión.');
-        }
-
         const existingSchedules = (user.enrollments || [])
-            .map((enrollment) => COMISIONES.find((commission) => commission.id === enrollment.comisionId)?.horarios)
+            .map((enrollment) => comisiones.find((commission) => commission.id === enrollment.comisionId)?.horarios)
             .filter((schedule): schedule is NonNullable<typeof schedule> => !!schedule);
         const hasScheduleConflict = hasEnrollmentConflict(existingSchedules, selectedCommission.horarios);
 
@@ -183,15 +177,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throw new Error('Existe un conflicto horario con otra materia en la que ya estás inscripto.');
         }
 
-        const newEnrollment = { materiaId, catedraId, comisionId };
-        const updatedEnrollments = [...(user.enrollments || []), newEnrollment];
-        updateLocalUser((current) => ({ ...current, enrollments: updatedEnrollments }));
+        await addEnrollmentByExternal({
+            userId: user.id,
+            subjectExternalId: materiaId,
+            cathedraExternalId: catedraId,
+            commissionExternalId: comisionId,
+        });
     };
 
-    const removeEnrollment = (materiaId: string) => {
+    const removeEnrollment = async (materiaId: string) => {
         if (!user) return;
-        const updatedEnrollments = user.enrollments?.filter(e => e.materiaId !== materiaId) || [];
-        updateLocalUser((current) => ({ ...current, enrollments: updatedEnrollments }));
+        await removeEnrollmentByExternal({ userId: user.id, subjectExternalId: materiaId });
     };
 
     const toggleApproved = (materiaId: string) => {
@@ -200,20 +196,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // If ALREADY approved, we are UN-approving (removing). No validation needed.
         if (currentApproved.includes(materiaId)) {
-            const updatedApproved = currentApproved.filter(id => id !== materiaId);
-            updateLocalUser((current) => ({ ...current, approvedSubjects: updatedApproved }));
+            void toggleApprovedSubjectMutation({ subjectExternalId: materiaId });
             return;
         }
 
         // If NOT approved, we are trying to APPROVE. VALIDATION REQUIRED.
-        const node = CORRELATIVES_NODES.find(n => n.materiaId === materiaId);
+        const correlativesNodes = correlativesMap?.nodes || [];
+        const correlativesEdges = correlativesMap?.edges || [];
+        const node = correlativesNodes.find((n: any) => n.materiaId === materiaId);
 
         if (node) {
             // Find prerequisites (incoming edges)
-            const prerequisites = CORRELATIVES_EDGES
+            const prerequisites = correlativesEdges
                 .filter(e => e.target === node.id)
                 .map(e => {
-                    const sourceNode = CORRELATIVES_NODES.find(n => n.id === e.source);
+                    const sourceNode = correlativesNodes.find((n: any) => n.id === e.source);
                     return sourceNode;
                 })
                 .filter(n => n !== undefined); // Ensure we found them
@@ -228,36 +225,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (missingPrereqs.length > 0) {
                 // Formatting message
                 const missingNames = missingPrereqs.map(p => p?.label).join(', ');
-                addNotification(
-                    "No puedes aprobar esta materia",
-                    `Te faltan las siguientes correlativas: ${missingNames}`,
-                    'error'
-                );
+                console.warn(`No puedes aprobar esta materia. Correlativas faltantes: ${missingNames}`);
                 return; // BLOCK ACTION
             }
         }
 
         // If validation passed (or node not found in map, which implies no constraints known), proceed.
-        const updatedApproved = [...currentApproved, materiaId];
-
-        // Remove from enrollments if exists (Simulating "Passed" state logic)
-        const updatedEnrollments = user.enrollments?.filter(e => e.materiaId !== materiaId) || [];
-
-        const updatedUser = {
-            ...user,
-            approvedSubjects: updatedApproved,
-            enrollments: updatedEnrollments
-        };
-        updateLocalUser((current) => ({ ...current, approvedSubjects: updatedUser.approvedSubjects, enrollments: updatedUser.enrollments }));
+        void toggleApprovedSubjectMutation({ subjectExternalId: materiaId });
     };
 
-    const submitReview = (_targetUserId: string, _rating: number, _comment: string, _requestId: string) => {
+    const submitReview = async (targetUserId: string, rating: number, comment: string, requestId: string) => {
         if (!user) return;
-        addNotification('Reseñas en migración', 'Las reseñas se moverán a Convex en Sprint 5.', 'info');
+        await createReview({
+            requestId,
+            reviewerUserId: user.id,
+            targetUserId,
+            rating,
+            comment,
+        });
     };
 
     return (
-        <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout, loading, addDocument, addEnrollment, removeEnrollment, toggleApproved, submitReview }}>
+        <AuthContext.Provider value={{ user, isAuthenticated, isAdmin, login, register, logout, loading, addDocument, addEnrollment, removeEnrollment, toggleApproved, submitReview }}>
             {children}
         </AuthContext.Provider>
     );

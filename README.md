@@ -23,21 +23,23 @@ Aplicacion web para estudiantes de la Facultad de Ciencias Juridicas y Sociales 
 - `src/pages/`: pantallas de producto.
 - `src/components/`: componentes reutilizables y modales de flujo.
 - `src/domain/`: reglas puras de negocio testeables (`requestMatching`, `scheduleRules`).
-- `src/data/`: semillas y datos mock actuales.
+- `src/data/`: datasets de referencia no operativos (la fuente de verdad de negocio vive en Convex).
 - `src/convex/`: proveedor y wiring del cliente Convex.
 - `convex/`: schema y funciones backend (`users`, `subjects`, `requests`, `matches`, `chat`, `notifications`, `reviews`, `ranking`).
 
 ## Variables de entorno
 
 - `VITE_CONVEX_URL`: URL del deployment Convex.
-- `VITE_USE_CONVEX`: bandera de migración gradual (`true/false`).
+- `VITE_CONVEX_SITE_URL`: URL base para providers de Convex Auth.
+- `CONVEX_DEPLOYMENT`: nombre de deployment (`dev:...` / `prod:...`).
+- `VITE_SENTRY_DSN`: DSN de Sentry para monitoreo de errores en entorno de salida.
 
 ## Sprint 0 - Setup Convex (dev/prod)
 
 1. Ejecutar `npm run convex:dev` y seguir el wizard para enlazar el proyecto local.
 2. Confirmar que `convex/` contiene `schema.ts`, `auth.ts`, `http.ts` y módulos de dominio.
 3. Configurar `VITE_CONVEX_URL` con tu deployment de desarrollo.
-4. Verificar conectividad frontend: en el footer debe verse `Convex: online` cuando `VITE_USE_CONVEX=true`.
+4. Verificar conectividad frontend: en el footer debe verse `Convex: online`.
 5. Para producción, ejecutar `npm run convex:deploy` en pipeline o manualmente con credenciales de Convex.
 
 Comandos de validación:
@@ -60,7 +62,7 @@ Comandos de validación:
 - Tests unitarios en verde para reglas de negocio core.
 - Sin bypass de autenticacion.
 - Solicitudes con estados consistentes (`PENDING`, `MATCHED`, `CONFIRMED`, `COMPLETED`, `CANCELLED`).
-- Persistencia local consistente para sesion, solicitudes, chat y notificaciones.
+- Persistencia Convex consistente para sesion, inscripciones, solicitudes, chat, notificaciones, ranking y reseñas.
 
 ## Roadmap estratégico
 

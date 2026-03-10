@@ -6,11 +6,11 @@ import { useNotifications } from '../../context/NotificationsContext';
 import { Button } from '../../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { PrioritySelector } from '../../components/requests/PrioritySelector';
-import { MATERIAS, COMISIONES } from '../../data/mock';
 import { CommissionCard } from '../../components/dashboard/CommissionCard';
 import type { Comision } from '../../types';
 import { ArrowLeft, ArrowRight, Check, BookOpen, MapPin, ListOrdered, Sparkles } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useCatalog } from '../../context/CatalogContext';
 
 // Steps: 0 = Select Origin, 1 = Select Destination(s), 2 = Confirm
 type WizardStep = 0 | 1 | 2;
@@ -19,6 +19,7 @@ export function CreateRequestPage() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { user } = useAuth();
+    const { materias, comisiones } = useCatalog();
     const { addRequest } = useRequests();
     const { addNotification } = useNotifications();
 
@@ -30,50 +31,26 @@ export function CreateRequestPage() {
     const [destinationCommissions, setDestinationCommissions] = useState<Comision[]>([]);
 
     // Derived Data
-    // Derived Data
-    const mySubjects = MATERIAS; // Show ALL subjects as per user request
-    const selectedMateria = MATERIAS.find(m => m.id === originMateriaId);
+    const mySubjects = (user?.enrollments || [])
+        .map((enrollment) => materias.find((materia) => materia.id === enrollment.materiaId))
+        .filter((materia): materia is NonNullable<typeof materia> => Boolean(materia));
+    const selectedMateria = materias.find(m => m.id === originMateriaId);
 
-    // Mock logic to get current commission for a subject
     const currentCommission = useMemo(() => {
         if (!originMateriaId || !user) return null;
         const myEnrollment = user.enrollments?.find((enrollment) => enrollment.materiaId === originMateriaId);
         if (!myEnrollment) return null;
-        return COMISIONES.find((commission) => commission.id === myEnrollment.comisionId) || null;
-    }, [originMateriaId, user]);
+        return comisiones.find((commission) => commission.id === myEnrollment.comisionId) || null;
+    }, [originMateriaId, user, comisiones]);
 
-    // Available commissions logic with SIMULATION
     const availableDestinations = useMemo(() => {
         if (!originMateriaId || !currentCommission) return [];
-
-        // 1. Try to find real mock commissions
-        let options = COMISIONES.filter(c =>
+        return comisiones.filter(c =>
             c.materiaId === originMateriaId &&
-            c.id !== currentCommission.id
+            c.id !== currentCommission.id &&
+            !destinationCommissions.find(selected => selected.id === c.id)
         );
-
-        // 2. SIMULATION: If we don't have enough options (less than 3), generate them on the fly
-        if (options.length < 3) {
-            const needed = 3 - options.length;
-            for (let i = 0; i < needed; i++) {
-                const mockId = `mock-${originMateriaId}-${Date.now()}-${i}`;
-                options.push({
-                    id: mockId,
-                    materiaId: originMateriaId,
-                    catedraId: 'Cat. Simulada',
-                    // comision property removed as it does not exist in type Comision
-                    numero: 900 + i, // High number to indicate mock
-                    profesor: 'Cátedra Sugerida',
-                    horarios: [{ dia: i % 2 === 0 ? 'Martes' : 'Jueves', inicio: '14:00', fin: '18:00' }],
-                    cuposTotales: 50,
-                    cuposDisponibles: 10 + i // Ensure positive availability
-                } as Comision);
-            }
-        }
-
-        // Filter out already selected
-        return options.filter(c => !destinationCommissions.find(selected => selected.id === c.id));
-    }, [originMateriaId, currentCommission, destinationCommissions]);
+    }, [originMateriaId, currentCommission, destinationCommissions, comisiones]);
 
 
     // Handlers
@@ -105,7 +82,7 @@ export function CreateRequestPage() {
         else navigate('/dashboard');
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (!user || !originMateriaId) {
             console.error("Missing user or originMateriaId");
             return;
@@ -117,12 +94,11 @@ export function CreateRequestPage() {
             return;
         }
 
-        addRequest({
+        await addRequest({
             userId: user.id,
             materiaId: originMateriaId,
             comisionOrigenId: commissionToSwap,
             comisionesDestino: destinationCommissions.map((c, index) => ({
-                id: c.id,
                 comisionId: c.id,
                 prioridad: index + 1
             }))
@@ -139,7 +115,7 @@ export function CreateRequestPage() {
     ];
 
     return (
-        <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
+        <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-700 pb-36 md:pb-40">
             {/* Header & Steps */}
             <div className="space-y-8">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4">
@@ -373,7 +349,7 @@ export function CreateRequestPage() {
             </div>
 
             {/* Footer Actions */}
-            <div className="sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] rounded-t-2xl">
+            <div className="sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] rounded-t-2xl">
                 <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <div className="text-sm text-slate-500 hidden md:block">
                         Paso {step + 1} de 3

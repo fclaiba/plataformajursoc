@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useConvexAuth } from 'convex/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { CatalogProvider } from './context/CatalogContext';
 import { RequestsProvider } from './context/RequestsContext';
 import { ChatProvider } from './context/ChatContext';
 import { TourProvider } from './context/TourContext';
@@ -53,24 +54,35 @@ const ProfilePage = lazy(() => import('./pages/profile/ProfilePage').then((m) =>
 const EloTrainingPage = lazy(() => import('./pages/ranking/EloTrainingPage').then((m) => ({ default: m.EloTrainingPage })));
 const LeaderboardPage = lazy(() => import('./pages/ranking/LeaderboardPage').then((m) => ({ default: m.LeaderboardPage })));
 const LandingPage = lazy(() => import('./pages/public/LandingPage').then((m) => ({ default: m.LandingPage })));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })));
+
+const AdminRoute = ({ children }: { children: React.ReactElement }) => {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+};
 
 function App() {
   return (
-    <NotificationsProvider>
+    <CatalogProvider>
       <AuthProvider>
-        <RequestsProvider>
-          <ChatProvider>
-            <ProfessorsProvider>
-              <TourProvider>
-                <Router>
-                  <AppContent />
-                </Router>
-              </TourProvider>
-            </ProfessorsProvider>
-          </ChatProvider>
-        </RequestsProvider>
+        <NotificationsProvider>
+          <RequestsProvider>
+            <ChatProvider>
+              <ProfessorsProvider>
+                <TourProvider>
+                  <Router>
+                    <AppContent />
+                  </Router>
+                </TourProvider>
+              </ProfessorsProvider>
+            </ChatProvider>
+          </RequestsProvider>
+        </NotificationsProvider>
       </AuthProvider>
-    </NotificationsProvider>
+    </CatalogProvider>
   );
 }
 
@@ -135,6 +147,11 @@ function AppContent() {
               <ProfilePage />
             </ProtectedRoute>
           } />
+          <Route path="/users/:userId" element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          } />
 
           <Route path="/ranking/vote" element={
             <ProtectedRoute>
@@ -144,6 +161,13 @@ function AppContent() {
           <Route path="/ranking/leaderboard" element={
             <ProtectedRoute>
               <LeaderboardPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin" element={
+            <ProtectedRoute>
+              <AdminRoute>
+                <AdminDashboardPage />
+              </AdminRoute>
             </ProtectedRoute>
           } />
 

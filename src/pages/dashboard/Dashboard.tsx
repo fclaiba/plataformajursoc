@@ -3,21 +3,22 @@ import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { List, ArrowRightLeft, Search } from 'lucide-react';
-import { CATEDRAS, COMISIONES, MATERIAS } from '../../data/mock';
+import { useCatalog } from '../../context/CatalogContext';
 
 export function Dashboard() {
     const { user } = useAuth();
+    const { materias, catedras, comisiones } = useCatalog();
     const navigate = useNavigate();
 
     const mySubjects = (user?.enrollments || []).map((enrollment) => {
-        const materia = MATERIAS.find((subject) => subject.id === enrollment.materiaId);
-        const catedra = CATEDRAS.find((cathedra) => cathedra.id === enrollment.catedraId);
-        const comision = COMISIONES.find((commission) => commission.id === enrollment.comisionId);
+        const materia = materias.find((subject) => subject.id === enrollment.materiaId);
+        const catedra = catedras.find((cathedra) => cathedra.id === enrollment.catedraId);
+        const comision = comisiones.find((commission) => commission.id === enrollment.comisionId);
         return { materia, catedra, comision };
     }).filter((entry) => entry.materia && entry.catedra && entry.comision);
 
     return (
-        <div className="space-y-6 sm:space-y-10">
+        <div className="space-y-6 sm:space-y-10 pb-28 sm:pb-32">
             {/* Welcome Section */}
             <section className="space-y-2 animate-in slide-in-from-bottom-5 duration-700">
                 <h1 id="tour-welcome" className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
@@ -58,6 +59,34 @@ export function Dashboard() {
                         <CardTitle className="text-xl sm:text-2xl text-slate-800 group-hover:text-secondary-700 transition-colors">Buscar Permutas</CardTitle>
                         <CardDescription className="text-sm sm:text-base mt-2">Explora comisiones disponibles, filtra por horarios y encuentra tu match ideal.</CardDescription>
                     </CardHeader>
+                </Card>
+            </section>
+
+            <section className="animate-in slide-in-from-bottom-5 duration-700 delay-200">
+                <Card className="border-slate-200 bg-slate-50/80">
+                    <CardHeader>
+                        <CardTitle className="text-lg text-slate-900">Primeros pasos</CardTitle>
+                        <CardDescription>
+                            Seguí este orden para usar la plataforma con menos fricción.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 md:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Paso 1</div>
+                            <div className="font-semibold text-slate-800">Inscribite a tus materias</div>
+                            <p className="text-sm text-slate-500 mt-1">Registrá la comisión que estás cursando para habilitar permutas.</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Paso 2</div>
+                            <div className="font-semibold text-slate-800">Publicá o buscá una permuta</div>
+                            <p className="text-sm text-slate-500 mt-1">Elegí tus destinos y dejá que el matching encuentre la mejor coincidencia.</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Paso 3</div>
+                            <div className="font-semibold text-slate-800">Chateá, confirmá y reseñá</div>
+                            <p className="text-sm text-slate-500 mt-1">Coordiná con la otra persona, completá la permuta y dejá reputación real.</p>
+                        </div>
+                    </CardContent>
                 </Card>
             </section>
 

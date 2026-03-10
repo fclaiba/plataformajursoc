@@ -1,5 +1,5 @@
 import { useProfessors } from '../../context/ProfessorsContext';
-import { MATERIAS, CATEDRAS } from '../../data/mock';
+import type { ProfessorRole } from '../../context/ProfessorsContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Trophy, Search, ArrowLeft, Filter, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -7,9 +7,11 @@ import { useState, useMemo } from 'react';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { useCatalog } from '../../context/CatalogContext';
 
 export function LeaderboardPage() {
     const { professors } = useProfessors();
+    const { materias, catedras } = useCatalog();
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -21,21 +23,21 @@ export function LeaderboardPage() {
     // Derived Lists for Selects
     const filteredCatedras = useMemo(() => {
         if (selectedMateriaId === 'all') return [];
-        return CATEDRAS.filter(c => c.materiaId === selectedMateriaId);
-    }, [selectedMateriaId]);
+        return catedras.filter(c => c.materiaId === selectedMateriaId);
+    }, [selectedMateriaId, catedras]);
 
     // Determine current ranking context label
     const currentContextLabel = useMemo(() => {
         if (selectedCatedraId !== 'all') {
-            const cat = CATEDRAS.find(c => c.id === selectedCatedraId);
+            const cat = catedras.find(c => c.id === selectedCatedraId);
             return `Ranking Cátedra: ${cat?.nombre}`;
         }
         if (selectedMateriaId !== 'all') {
-            const mat = MATERIAS.find(m => m.id === selectedMateriaId);
+            const mat = materias.find(m => m.id === selectedMateriaId);
             return `Ranking Materia: ${mat?.nombre}`;
         }
         return 'Ranking General';
-    }, [selectedMateriaId, selectedCatedraId]);
+    }, [selectedMateriaId, selectedCatedraId, materias, catedras]);
 
     // Sorting & Filtering Logic
     const sortedProfessors = useMemo(() => {
@@ -79,7 +81,7 @@ export function LeaderboardPage() {
 
                 // Filter by Role
                 if (selectedRole !== 'all') {
-                    if (!p.roles.includes(selectedRole as any)) return false;
+                    if (p.role !== (selectedRole as ProfessorRole)) return false;
                 }
 
                 return true;
@@ -108,7 +110,7 @@ export function LeaderboardPage() {
     };
 
     return (
-        <div className="max-w-5xl mx-auto py-6 md:py-8 animate-in fade-in duration-700 px-3 sm:px-4">
+        <div className="max-w-5xl mx-auto py-6 md:py-8 animate-in fade-in duration-700 px-3 sm:px-4 pb-28 sm:pb-32">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-yellow-500 flex items-center">
@@ -159,7 +161,7 @@ export function LeaderboardPage() {
                             onChange={handleMateriaChange}
                         >
                             <option value="all">Todas las Materias</option>
-                            {MATERIAS.map(m => (
+                            {materias.map(m => (
                                 <option key={m.id} value={m.id}>{m.nombre}</option>
                             ))}
                         </select>
@@ -190,8 +192,6 @@ export function LeaderboardPage() {
                             <option value="all">Todos los Roles</option>
                             <option value="Titular">Titulares</option>
                             <option value="Adjunto">Adjuntos</option>
-                            <option value="JTP">JTP</option>
-                            <option value="Auxiliar">Auxiliares</option>
                         </select>
                     </div>
                 </div>
@@ -245,11 +245,9 @@ export function LeaderboardPage() {
                                                 {/* Info */}
                                                 <h3 className="font-bold text-slate-800 truncate flex items-center gap-1.5 sm:gap-2 flex-wrap">
                                                     {p.name}
-                                                    {p.roles?.map(r => (
-                                                        <span key={r} className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 uppercase tracking-wider font-bold">
-                                                            {r}
-                                                        </span>
-                                                    ))}
+                                                    <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 uppercase tracking-wider font-bold">
+                                                        {p.role}
+                                                    </span>
                                                 </h3>
                                                 <p className="text-xs text-slate-500 truncate mt-1">
                                                     {p.subjects.slice(0, 3).join(', ')}

@@ -1,11 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { LogOut, Bell, Trophy, BookOpen, LayoutDashboard, ArrowRightLeft, Library, Network } from 'lucide-react';
+import { LogOut, Bell, Trophy, BookOpen, LayoutDashboard, ArrowRightLeft, Library, Network, Shield } from 'lucide-react';
 import { Button } from '../ui/button';
 
 export function Navbar() {
-    const { user, logout, isAuthenticated } = useAuth();
+    const { user, logout, isAuthenticated, isAdmin } = useAuth();
     const { unreadCount } = useNotifications();
     const navigate = useNavigate();
 
@@ -51,6 +51,11 @@ export function Navbar() {
                                 <Link to="/ranking/vote" id="tour-ranking" className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-full transition-all" title="Ranking Docente">
                                     <Trophy className="h-5 w-5" />
                                 </Link>
+                                {isAdmin && (
+                                    <Link to="/admin" className="p-2 text-gray-500 hover:text-violet-600 hover:bg-violet-50 rounded-full transition-all" title="Admin">
+                                        <Shield className="h-5 w-5" />
+                                    </Link>
+                                )}
 
                                 <Link to="/notifications" id="tour-notifications" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all relative" title="Notificaciones">
                                     <Bell className="h-5 w-5" />
@@ -74,7 +79,7 @@ export function Navbar() {
                                                 {user?.name || 'Usuario'}
                                             </div>
                                             <div className="text-[11px] text-primary-500 font-medium truncate">
-                                                Estudiante
+                                                {isAdmin ? 'Admin' : 'Estudiante'}
                                             </div>
                                         </div>
                                     </Link>

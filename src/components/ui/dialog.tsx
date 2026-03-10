@@ -4,11 +4,11 @@ import { cn } from "../../lib/utils"
 const Dialog = React.forwardRef<
     HTMLDivElement,
     React.HTMLAttributes<HTMLDivElement> & { open?: boolean; onOpenChange?: (open: boolean) => void }
->(({ open, onOpenChange, children }, _ref) => {
+>(({ open, onOpenChange, children }, ref) => {
     if (!open) return null
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div ref={ref} className="fixed inset-0 z-50 flex items-center justify-center">
             {/* Backdrop */}
             <div
                 className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-300 animate-in fade-in"

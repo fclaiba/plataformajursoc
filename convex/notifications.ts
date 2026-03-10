@@ -3,9 +3,14 @@ import { mutation, query } from "./_generated/server";
 import { now } from "./utils";
 
 export const listByUser = query({
-  args: { userId: v.id("users") },
+  args: { userId: v.id("users"), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    return await ctx.db.query("notifications").withIndex("by_user", (q) => q.eq("userId", args.userId)).collect();
+    const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
+    const rows = await ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    return rows.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
   },
 });
 

@@ -12,10 +12,13 @@
     "test:e2e": "playwright test",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
-    "convex:check": "node scripts/convex-check.mjs"
+    "convex:check": "node scripts/convex-check.mjs",
+    "release:readiness": "node scripts/release-readiness.mjs",
+    "release:smoke": "npm run test && npm run build && npm run test:e2e"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.91",
+    "@sentry/react": "^10.42.0",
     "@types/dagre": "^0.7.53",
     "clsx": "^2.1.1",
     "convex": "^1.32.0",

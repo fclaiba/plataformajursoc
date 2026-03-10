@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext } from 'react';
+import { useMutation, useQuery } from 'convex/react';
+import { useAuth } from './AuthContext';
+import {
+    notificationsClearByUser,
+    notificationsCreate,
+    notificationsListByUser,
+    notificationsMarkRead,
+} from '../convex/functions';
 
 export interface Notification {
     id: string;
@@ -19,27 +27,26 @@ interface NotificationsContextType {
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
-const NOTIFICATIONS_STORAGE_KEY = 'app-permutas-notifications-v1';
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-    const [notifications, setNotifications] = useState<Notification[]>(() => {
-        const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
-        if (!raw) return [];
-        try {
-            const parsed = JSON.parse(raw) as Array<Notification & { createdAt: string }>;
-            return parsed.map((notification) => ({ ...notification, createdAt: new Date(notification.createdAt) }));
-        } catch {
-            return [];
-        }
-    });
+    const { user } = useAuth();
+    const createNotificationMutation = useMutation(notificationsCreate);
+    const markReadMutation = useMutation(notificationsMarkRead);
+    const clearByUserMutation = useMutation(notificationsClearByUser);
+    const rows = useQuery(
+        notificationsListByUser,
+        user?.id ? { userId: user.id, limit: 100 } : "skip"
+    );
 
-    const persistNotifications = (updater: (current: Notification[]) => Notification[]) => {
-        setNotifications((prev) => {
-            const next = updater(prev);
-            localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(next));
-            return next;
-        });
-    };
+    const notifications: Notification[] = (rows || []).map((row) => ({
+        id: row._id,
+        title: row.title,
+        message: row.message,
+        type: row.type,
+        source: row.source,
+        read: !!row.readAt,
+        createdAt: new Date(row.createdAt),
+    }));
 
     const addNotification = (
         title: string,
@@ -47,26 +54,23 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         type: 'info' | 'success' | 'warning' | 'error' = 'info',
         source: Notification['source'] = 'system'
     ) => {
-        const newNotification: Notification = {
-            id: crypto.randomUUID(),
+        if (!user?.id) return;
+        void createNotificationMutation({
+            userId: user.id,
             title,
             message,
             type,
             source,
-            read: false,
-            createdAt: new Date(),
-        };
-        persistNotifications((current) => [newNotification, ...current]);
+        });
     };
 
     const markAsRead = (id: string) => {
-        persistNotifications((current) => current.map((notification) => (
-            notification.id === id ? { ...notification, read: true } : notification
-        )));
+        void markReadMutation({ notificationId: id });
     };
 
     const clearAll = () => {
-        persistNotifications(() => []);
+        if (!user?.id) return;
+        void clearByUserMutation({ userId: user.id });
     };
 
     const unreadCount = notifications.filter(n => !n.read).length;

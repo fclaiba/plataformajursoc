@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { MATERIAS, CATEDRAS, COMISIONES } from '../../data/mock';
+import { useCatalog } from '../../context/CatalogContext';
 import { Button } from '../../components/ui/button';
 import { Plus, Trash2, BookOpen, Calendar, GraduationCap, Users } from 'lucide-react';
 import { AddSubjectModal } from '../../components/subjects/AddSubjectModal';
@@ -9,21 +9,22 @@ import { Link } from 'react-router-dom';
 
 export function MySubjectsPage() {
     const { user, removeEnrollment } = useAuth();
+    const { materias, catedras, comisiones } = useCatalog();
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isResourcesModalOpen, setIsResourcesModalOpen] = useState(false);
     const [selectedMateriaForResources, setSelectedMateriaForResources] = useState<any>(null);
 
     const getEnrollmentDetails = (enrollment: { materiaId: string, catedraId: string, comisionId: string }) => {
-        const materia = MATERIAS.find(m => m.id === enrollment.materiaId);
-        const catedra = CATEDRAS.find(c => c.id === enrollment.catedraId);
-        const comision = COMISIONES.find(c => c.id === enrollment.comisionId);
+        const materia = materias.find(m => m.id === enrollment.materiaId);
+        const catedra = catedras.find(c => c.id === enrollment.catedraId);
+        const comision = comisiones.find(c => c.id === enrollment.comisionId);
         return { materia, catedra, comision };
     };
 
     const hasEnrollments = user?.enrollments && user.enrollments.length > 0;
 
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 sm:pb-32 animate-in fade-in duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Mis Materias</h1>
@@ -121,7 +122,7 @@ export function MySubjectsPage() {
                                         className="text-slate-400 hover:text-red-500 hover:bg-red-50"
                                         onClick={() => {
                                             if (window.confirm('¿Seguro que quieres eliminar esta inscripción?')) {
-                                                removeEnrollment(materia.id);
+                                                void removeEnrollment(materia.id);
                                             }
                                         }}
                                         title="Eliminar inscripción"

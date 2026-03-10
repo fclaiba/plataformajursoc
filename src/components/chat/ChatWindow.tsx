@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { useRequests } from '../../context/RequestsContext';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Send, X, User, Image as ImageIcon, Loader2, ShieldAlert } from 'lucide-react';
@@ -9,16 +10,16 @@ import { cn } from '../../lib/utils';
 import { validateFileSignature, scanFile } from '../../utils/security';
 
 interface ChatWindowProps {
-    receiverId: string;
     receiverName: string;
+    receiverUserId?: string;
     requestId: string;
     onClose: () => void;
-    onEndExchange?: () => void;
 }
 
-export function ChatWindow({ receiverId, receiverName, requestId, onClose, onEndExchange }: ChatWindowProps) {
+export function ChatWindow({ receiverName, receiverUserId, requestId, onClose }: ChatWindowProps) {
+    const navigate = useNavigate();
     const { user } = useAuth();
-    const { sendMessage, getMessagesByRequest } = useChat();
+    const { sendMessage, getMessagesByRequest, subscribeToRequest, markAsRead } = useChat();
     const { finalizeRequest } = useRequests();
     const [newMessage, setNewMessage] = useState('');
     const [isUploading, setIsUploading] = useState(false);
@@ -27,9 +28,12 @@ export function ChatWindow({ receiverId, receiverName, requestId, onClose, onEnd
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messages = getMessagesByRequest(requestId);
 
-    const handleEndExchange = () => {
-        finalizeRequest(requestId);
-        if (onEndExchange) onEndExchange();
+    useEffect(() => {
+        subscribeToRequest(requestId);
+    }, [requestId, subscribeToRequest]);
+
+    const handleEndExchange = async () => {
+        await finalizeRequest(requestId);
         onClose();
     };
 
@@ -41,11 +45,22 @@ export function ChatWindow({ receiverId, receiverName, requestId, onClose, onEnd
         scrollToBottom();
     }, [messages, isUploading]);
 
-    const handleSend = (e?: React.FormEvent) => {
+    useEffect(() => {
+        if (messages.length === 0) return;
+        markAsRead(messages[messages.length - 1].id);
+    }, [messages, markAsRead]);
+
+    const handleSend = async (e?: React.FormEvent) => {
         e?.preventDefault();
         if (!newMessage.trim()) return;
-        sendMessage(receiverId, newMessage, requestId);
-        setNewMessage('');
+        try {
+            await sendMessage(newMessage, requestId);
+            setNewMessage('');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo enviar el mensaje.';
+            setUploadError(message);
+            setTimeout(() => setUploadError(null), 4000);
+        }
     };
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,7 +84,7 @@ export function ChatWindow({ receiverId, receiverName, requestId, onClose, onEnd
             }
 
             // 3. Send
-            sendMessage(receiverId, '', requestId, file);
+            await sendMessage('', requestId, file);
 
         } catch (err: any) {
             setUploadError(err.message || 'Error al subir imagen');
@@ -97,6 +112,16 @@ export function ChatWindow({ receiverId, receiverName, requestId, onClose, onEnd
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => receiverUserId && navigate(`/users/${receiverUserId}`)}
+                        disabled={!receiverUserId}
+                        className="text-xs bg-white/10 hover:bg-white/20 text-white h-7 px-3 font-bold shadow-sm"
+                        title="Ver reputación del usuario"
+                    >
+                        <User className="w-4 h-4 mr-1.5" /> Perfil
+                    </Button>
                     <Button
                         size="sm"
                         variant="ghost"
