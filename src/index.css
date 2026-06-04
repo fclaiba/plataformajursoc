@@ -24,8 +24,36 @@
       radial-gradient(at 40% 20%, hsla(228, 100%, 96%, 1) 0px, transparent 50%),
       radial-gradient(at 80% 0%, hsla(249, 100%, 96%, 1) 0px, transparent 50%),
       radial-gradient(at 0% 50%, hsla(340, 100%, 96%, 1) 0px, transparent 50%);
-    @apply bg-white;
+    background-color: white;
   }
+
+  body.dark {
+    background-image:
+      radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+      radial-gradient(at 50% 0%, hsla(225, 39%, 15%, 1) 0, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(339, 49%, 15%, 1) 0, transparent 50%);
+    @apply bg-slate-950 text-slate-100;
+  }
+
+  body.dark * {
+    border-color: theme('colors.slate.700');
+  }
+  /* Dark mode overrides for key elements - using hex to avoid postcss circular dep bugs */
+  body.dark .bg-white { background-color: #1e293b; }
+  body.dark .bg-slate-50 { background-color: #0f172a; }
+  body.dark .bg-slate-100 { background-color: #1e293b; }
+  body.dark .bg-gray-100 { background-color: #0f172a; }
+  body.dark .text-slate-900 { color: #f1f5f9; }
+  body.dark .text-slate-800 { color: #e2e8f0; }
+  body.dark .text-slate-700 { color: #cbd5e1; }
+  body.dark .text-slate-600 { color: #94a3b8; }
+  body.dark .text-slate-500 { color: #94a3b8; }
+  body.dark .text-gray-700 { color: #cbd5e1; }
+  body.dark .text-gray-600 { color: #94a3b8; }
+  body.dark .text-gray-500 { color: #94a3b8; }
+  body.dark .border-slate-200 { border-color: #334155; }
+  body.dark .border-slate-100 { border-color: #334155; }
+  body.dark .border-gray-200 { border-color: #334155; }
 }
 
 @layer utilities {
@@ -33,8 +61,16 @@
     @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl;
   }
 
+  body.dark .glass {
+    @apply bg-slate-900/70 backdrop-blur-md border border-slate-700/50 shadow-xl;
+  }
+
   .glass-card {
     @apply bg-white/80 backdrop-blur-sm border border-white/40 shadow-sm hover:shadow-md transition-all duration-300;
+  }
+
+  body.dark .glass-card {
+    @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700/40;
   }
 
   .glass-dark {

@@ -1,16 +1,50 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { now } from "./utils";
+import { now, requireAuth } from "./utils";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+
+/**
+ * Internal helper — call from other mutations to create a notification
+ * without going through the mutation args / validation layer.
+ */
+export const insertNotification = async (
+  ctx: MutationCtx,
+  params: {
+    userId: Id<"users">;
+    title: string;
+    message: string;
+    type: "info" | "success" | "warning" | "error";
+    source?: "auth" | "requests" | "chat" | "ranking" | "system";
+  },
+) => {
+  const notifId = await ctx.db.insert("notifications", {
+    ...params,
+    createdAt: now(),
+    readAt: undefined,
+  });
+
+  await ctx.scheduler.runAfter(0, api.pushAction.sendPushNotification, {
+    userId: params.userId,
+    title: params.title,
+    body: params.message,
+    url: "/notifications",
+  });
+
+  return notifId;
+};
+import { paginationOptsValidator } from "convex/server";
+import { api } from "./_generated/api";
 
 export const listByUser = query({
-  args: { userId: v.id("users"), limit: v.optional(v.number()) },
+  args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
-    const rows = await ctx.db
+    const userId = await requireAuth(ctx);
+    return await ctx.db
       .query("notifications")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .collect();
-    return rows.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
@@ -23,25 +57,36 @@ export const createNotification = mutation({
     source: v.optional(v.union(v.literal("auth"), v.literal("requests"), v.literal("chat"), v.literal("ranking"), v.literal("system"))),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("notifications", {
+    const notifId = await ctx.db.insert("notifications", {
       ...args,
       createdAt: now(),
       readAt: undefined,
     });
+
+    await ctx.scheduler.runAfter(0, api.pushAction.sendPushNotification, {
+      userId: args.userId,
+      title: args.title,
+      body: args.message,
+      url: "/notifications",
+    });
+
+    return notifId;
   },
 });
 
 export const markRead = mutation({
   args: { notificationId: v.id("notifications") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     await ctx.db.patch(args.notificationId, { readAt: now() });
   },
 });
 
 export const clearByUser = mutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    const all = await ctx.db.query("notifications").withIndex("by_user", (q) => q.eq("userId", args.userId)).collect();
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
+    const all = await ctx.db.query("notifications").withIndex("by_user", (q) => q.eq("userId", userId)).collect();
     for (const n of all) await ctx.db.delete(n._id);
   },
 });

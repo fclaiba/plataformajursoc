@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { BadgeCheck, Clock, XCircle, CheckCircle, ArrowRightLeft, User, MessageSquare } from 'lucide-react';
+import { BadgeCheck, Clock, XCircle, CheckCircle, ArrowRightLeft, User, MessageSquare, Pencil, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { ChatWindow } from '../../components/chat/ChatWindow';
@@ -15,6 +15,7 @@ import { ContactStudentModal } from '../../components/requests/ContactStudentMod
 import type { ExchangeRequest } from '../../types';
 import { useCatalog } from '../../context/CatalogContext';
 import { reviewsListByReviewer } from '../../convex/functions';
+import { downloadCSV } from '../../lib/exportCsv';
 
 export function MyRequestsPage() {
     const { user, submitReview } = useAuth(); // Need user ID
@@ -29,12 +30,12 @@ export function MyRequestsPage() {
     const [isReviewOpen, setIsReviewOpen] = useState(false);
     const reviewerReviews = useQuery(
         reviewsListByReviewer,
-        user?.id ? { reviewerUserId: user.id } : "skip",
+        user?.id ? {} : "skip",
     ) || [];
-    const reviewedRequestIds = new Set(reviewerReviews.map((row) => row.requestId));
 
-    const handleContact = (request: ExchangeRequest) => {
-        const matchedRequest = requests.find((r) => r.id === request.matchedRequestId);
+    const handleContact = (request: ExchangeRequest, counterpartId?: string) => {
+        const idToFind = counterpartId || request.giveToRequestId || request.receiveFromRequestId;
+        const matchedRequest = requests.find((r) => r.id === idToFind);
         if (!matchedRequest?.userId) {
             addNotification('Aún sin contraparte', 'Esta solicitud todavía no tiene usuario emparejado.', 'warning');
             return;
@@ -44,8 +45,9 @@ export function MyRequestsPage() {
         setIsContactModalOpen(true);
     };
 
-    const handleChat = (request: ExchangeRequest) => {
-        const matchedRequest = requests.find((r) => r.id === request.matchedRequestId);
+    const handleChat = (request: ExchangeRequest, counterpartId?: string) => {
+        const idToFind = counterpartId || request.giveToRequestId || request.receiveFromRequestId;
+        const matchedRequest = requests.find((r) => r.id === idToFind);
         if (!matchedRequest?.userId) {
             addNotification('Aún sin contraparte', 'Esta solicitud todavía no tiene usuario emparejado.', 'warning');
             return;
@@ -65,8 +67,7 @@ export function MyRequestsPage() {
 
     const handleSubmitReview = async (rating: number, comment: string) => {
         if (!selectedRequest) return;
-        const matchedRequest = requests.find((request) => request.id === selectedRequest.matchedRequestId);
-        const targetUserId = matchedRequest?.userId || selectedPeer?.id;
+        const targetUserId = selectedPeer?.id;
         if (!targetUserId) {
             addNotification('No se pudo enviar la reseña', 'No se encontró la contraparte de la permuta.', 'warning');
             return;
@@ -135,7 +136,32 @@ export function MyRequestsPage() {
                     </p>
                 </div>
 
-                <div />
+                <div>
+                    {myRequests.length > 0 && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                const data = myRequests.map((r) => ({
+                                    materia: getMateriaName(r.materiaId),
+                                    comisionOrigen: r.comisionOrigenId,
+                                    destinos: r.comisionesDestino.map((d) => d.comisionId).join('; '),
+                                    estado: r.status,
+                                    creada: new Date(r.createdAt).toLocaleDateString('es-AR'),
+                                }));
+                                downloadCSV(data, 'mis-permutas', [
+                                    { key: 'materia', label: 'Materia' },
+                                    { key: 'comisionOrigen', label: 'Comisión Origen' },
+                                    { key: 'destinos', label: 'Destinos' },
+                                    { key: 'estado', label: 'Estado' },
+                                    { key: 'creada', label: 'Fecha' },
+                                ]);
+                            }}
+                        >
+                            <Download className="w-4 h-4 mr-1" /> Exportar CSV
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <div className="space-y-6">
@@ -208,37 +234,55 @@ export function MyRequestsPage() {
                                                                 ¡Match Encontrado!
                                                             </p>
                                                             <p className="text-xs text-emerald-600">Un compañero aceptó tu intercambio.</p>
-                                                            <div className="grid grid-cols-2 gap-2 w-full">
-                                                                <Button
-                                                                    onClick={() => handleChat(req)}
-                                                                    className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 border-0"
-                                                                >
-                                                                    <MessageSquare className="w-4 h-4 mr-2" /> Chatear
-                                                                </Button>
-                                                                <Button
-                                                                    onClick={() => handleContact(req)}
-                                                                    variant="outline"
-                                                                    className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                                                >
-                                                                    <User className="w-4 h-4 mr-2" /> Contactar
-                                                                </Button>
-                                                            </div>
-                                                            <Button
-                                                                onClick={() => {
-                                                                    const matchedRequest = requests.find((request) => request.id === req.matchedRequestId);
-                                                                    handleViewProfile(matchedRequest?.userId);
-                                                                }}
-                                                                variant="outline"
-                                                                className="w-full mt-2 border-slate-200 text-slate-700 hover:bg-slate-50"
-                                                            >
-                                                                <User className="w-4 h-4 mr-2" /> Ver perfil
-                                                            </Button>
-                                                            <Button
-                                                                onClick={() => void finalizeRequest(req.id)}
-                                                                className="w-full mt-2 bg-emerald-700 hover:bg-emerald-800 text-white"
-                                                            >
-                                                                <CheckCircle className="w-4 h-4 mr-2" /> Confirmar Intercambio
-                                                            </Button>
+                                                            {(() => {
+                                                                const giveToRequest = requests.find((request) => request.id === req.giveToRequestId);
+                                                                const receiveFromRequest = requests.find((request) => request.id === req.receiveFromRequestId);
+                                                                const isThreeWay = giveToRequest && receiveFromRequest && giveToRequest.id !== receiveFromRequest.id;
+
+                                                                const renderCounterpart = (r: ExchangeRequest, label: string) => (
+                                                                    <div key={r.id} className="mt-4 p-3 bg-white/50 rounded-lg text-left">
+                                                                        <p className="text-sm font-semibold text-emerald-900 mb-2">{label}</p>
+                                                                        <div className="grid grid-cols-2 gap-2 mb-3">
+                                                                            <Button
+                                                                                onClick={() => handleChat(req, r.id)}
+                                                                                className="w-full bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 border-0 text-xs py-1 h-8"
+                                                                            >
+                                                                                <MessageSquare className="w-3 h-3 mr-1" /> Chatear
+                                                                            </Button>
+                                                                            <Button
+                                                                                onClick={() => handleContact(req, r.id)}
+                                                                                variant="outline"
+                                                                                className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs py-1 h-8"
+                                                                            >
+                                                                                <User className="w-3 h-3 mr-1" /> Contactar
+                                                                            </Button>
+                                                                        </div>
+                                                                        <Button
+                                                                            onClick={() => handleViewProfile(r.userId)}
+                                                                            variant="outline"
+                                                                            className="w-full border-slate-200 text-slate-700 hover:bg-slate-50 text-xs py-1 h-8"
+                                                                        >
+                                                                            <User className="w-3 h-3 mr-1" /> Ver perfil
+                                                                        </Button>
+                                                                    </div>
+                                                                );
+
+                                                                return (
+                                                                    <>
+                                                                        {isThreeWay && <p className="text-xs font-semibold text-amber-700 bg-amber-100 p-1 rounded mb-2">🔄 Permuta Triangular</p>}
+                                                                        {isThreeWay && giveToRequest ? renderCounterpart(giveToRequest, "Le cedes tu cupo a:") : null}
+                                                                        {isThreeWay && receiveFromRequest ? renderCounterpart(receiveFromRequest, "Recibes el cupo de:") : null}
+                                                                        {!isThreeWay && giveToRequest ? renderCounterpart(giveToRequest, "Compañero asignado:") : null}
+                                                                        
+                                                                        <Button
+                                                                            onClick={() => void finalizeRequest(req.id)}
+                                                                            className="w-full mt-4 bg-emerald-700 hover:bg-emerald-800 text-white shadow-xl"
+                                                                        >
+                                                                            <CheckCircle className="w-4 h-4 mr-2" /> Confirmar Permuta {isThreeWay ? "Triangular" : ""}
+                                                                        </Button>
+                                                                    </>
+                                                                );
+                                                            })()}
                                                         </>
                                                     )}
                                                 </div>
@@ -249,28 +293,49 @@ export function MyRequestsPage() {
                                                         ¡Permuta Completada!
                                                     </p>
                                                     <p className="text-xs text-indigo-600">Ambos confirmaron el intercambio. Ya podés dejar tu reseña.</p>
-                                                    {reviewedRequestIds.has(req.id) ? (
-                                                        <Button
-                                                            disabled
-                                                            className="w-full bg-emerald-600/90 text-white border-0 cursor-not-allowed"
-                                                        >
-                                                            <CheckCircle className="w-4 h-4 mr-2" /> Reseña enviada
-                                                        </Button>
-                                                    ) : (
-                                                        <Button
-                                                            onClick={() => {
-                                                                const matchedRequest = requests.find((request) => request.id === req.matchedRequestId);
-                                                                if (matchedRequest?.userId) {
-                                                                    setSelectedPeer({ id: matchedRequest.userId, name: `Estudiante ${matchedRequest.userId.slice(0, 6)}` });
-                                                                }
-                                                                setSelectedRequest(req);
-                                                                setIsReviewOpen(true);
-                                                            }}
-                                                            className="w-full bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 border-0"
-                                                        >
-                                                            <StarRating rating={1} size="sm" className="mr-2 text-indigo-200" /> Calificar Experiencia
-                                                        </Button>
-                                                    )}
+                                                    {(() => {
+                                                        const giveToRequest = requests.find((request) => request.id === req.giveToRequestId);
+                                                        const receiveFromRequest = requests.find((request) => request.id === req.receiveFromRequestId);
+                                                        const isThreeWay = giveToRequest && receiveFromRequest && giveToRequest.id !== receiveFromRequest.id;
+                                                        
+                                                        const renderReviewButton = (r: ExchangeRequest, label: string) => {
+                                                            const hasReviewed = reviewerReviews.some(
+                                                                (rev: any) => rev.requestId === req.id && rev.targetUserId === r.userId
+                                                            );
+                                                            if (hasReviewed) {
+                                                                return (
+                                                                    <div key={`review-done-${r.id}`} className="mt-2">
+                                                                        <Button disabled className="w-full bg-emerald-600/90 text-white border-0 cursor-not-allowed">
+                                                                            <CheckCircle className="w-4 h-4 mr-2" /> Reseña enviada
+                                                                        </Button>
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <div key={`review-${r.id}`} className="mt-2 text-left">
+                                                                    <p className="text-xs font-semibold text-indigo-900 mb-1">{label}</p>
+                                                                    <Button
+                                                                        onClick={() => {
+                                                                            setSelectedPeer({ id: r.userId, name: `Estudiante ${r.userId.slice(0, 6)}` });
+                                                                            setSelectedRequest(req);
+                                                                            setIsReviewOpen(true);
+                                                                        }}
+                                                                        className="w-full bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 border-0 text-xs h-8"
+                                                                    >
+                                                                        <StarRating rating={1} size="sm" className="mr-2 text-indigo-200" /> Calificar
+                                                                    </Button>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        return (
+                                                            <>
+                                                                {isThreeWay && giveToRequest ? renderReviewButton(giveToRequest, "A quien cediste:") : null}
+                                                                {isThreeWay && receiveFromRequest ? renderReviewButton(receiveFromRequest, "De quien recibiste:") : null}
+                                                                {!isThreeWay && giveToRequest ? renderReviewButton(giveToRequest, "Tu compañero:") : null}
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                             ) : req.status === 'CONFIRMED' ? (
                                                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center space-y-3 animate-in fade-in zoom-in">
@@ -285,9 +350,14 @@ export function MyRequestsPage() {
                                                     <p className="text-sm text-slate-400 italic mb-4">
                                                         Estamos buscando compañeros compatibles con tu solicitud...
                                                     </p>
-                                                    <Button variant="outline" size="sm" className="w-full text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50" onClick={() => void cancelRequest(req.id)}>
-                                                        Cancelar Solicitud
-                                                    </Button>
+                                                    <div className="flex gap-2">
+                                                        <Button variant="outline" size="sm" className="flex-1 text-primary-600 hover:text-primary-700 hover:border-primary-200 hover:bg-primary-50" onClick={() => navigate(`/requests/edit/${req.id}`)}>
+                                                            <Pencil className="w-4 h-4 mr-1" /> Editar
+                                                        </Button>
+                                                        <Button variant="outline" size="sm" className="flex-1 text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50" onClick={() => void cancelRequest(req.id)}>
+                                                            Cancelar
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

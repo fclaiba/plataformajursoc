@@ -109,14 +109,12 @@ export const subjectsGetCatalogIdsByExternal = makeFunctionReference<'query', {
 }>('subjects:getCatalogIdsByExternal');
 
 export const subjectsAddEnrollmentByExternal = makeFunctionReference<'mutation', {
-  userId: string;
   subjectExternalId: string;
   cathedraExternalId: string;
   commissionExternalId: string;
 }, string>('subjects:addEnrollmentByExternal');
 
 export const subjectsRemoveEnrollmentByExternal = makeFunctionReference<'mutation', {
-  userId: string;
   subjectExternalId: string;
 }, void>('subjects:removeEnrollmentByExternal');
 
@@ -124,20 +122,33 @@ export const requestsListVisibleByUser = makeFunctionReference<'query', { userId
   'requests:listVisibleByUser',
 );
 export const requestsCreate = makeFunctionReference<'mutation', {
-  userId: string;
   subjectId: string;
   commissionOriginId: string;
   destinations: Array<{ commissionId: string; priority: number }>;
 }, string>('requests:createRequest');
-export const requestsCancel = makeFunctionReference<'mutation', { requestId: string; actorUserId: string }, void>(
+export const requestsCancel = makeFunctionReference<'mutation', { requestId: string }, void>(
   'requests:cancelRequest',
 );
-export const requestsFinalize = makeFunctionReference<'mutation', { requestId: string; actorUserId: string }, void>(
+export const requestsFinalize = makeFunctionReference<'mutation', { requestId: string }, void>(
   'requests:finalizeRequest',
 );
-export const requestsComplete = makeFunctionReference<'mutation', { requestId: string; actorUserId: string }, void>(
+export const requestsComplete = makeFunctionReference<'mutation', { requestId: string }, void>(
   'requests:completeExchange',
 );
+export const requestsEdit = makeFunctionReference<'mutation', {
+  requestId: string;
+  destinations: Array<{ commissionId: string; priority: number }>;
+}, string>('requests:editRequest');
+export const requestsGetDashboardStats = makeFunctionReference<'query', Record<string, never>, {
+  active: number;
+  completed: number;
+  pendingConfirm: number;
+  unreadMessages: number;
+}>('requests:getDashboardStats');
+export const requestsCountActiveByCommission = makeFunctionReference<'query', { subjectExternalId: string }, Array<{
+  commissionId: string;
+  count: number;
+}>>('requests:countActiveByCommission');
 
 export const chatGetOrCreateThread = makeFunctionReference<'mutation', {
   requestId: string;
@@ -154,7 +165,6 @@ export const chatGenerateUploadUrl = makeFunctionReference<'mutation', Record<st
 export const chatSendMessage = makeFunctionReference<'mutation', {
   threadId: string;
   requestId: string;
-  senderUserId: string;
   content: string;
   type: 'text' | 'image';
   mediaUrl?: string;
@@ -162,11 +172,9 @@ export const chatSendMessage = makeFunctionReference<'mutation', {
 }, string>('chat:sendMessage');
 export const chatMarkRequestMessagesAsRead = makeFunctionReference<'mutation', {
   requestId: string;
-  readerUserId: string;
 }, { ok: boolean; updated: number }>('chat:markRequestMessagesAsRead');
 export const chatMarkThreadMessagesAsRead = makeFunctionReference<'mutation', {
   threadId: string;
-  readerUserId: string;
 }, { ok: boolean; updated: number }>('chat:markThreadMessagesAsRead');
 export const chatBackfillPairThreads = makeFunctionReference<'mutation', Record<string, never>, {
   ok: boolean;
@@ -175,7 +183,7 @@ export const chatBackfillPairThreads = makeFunctionReference<'mutation', Record<
   processedPairs: number;
 }>('chat:backfillPairThreads');
 
-export const notificationsListByUser = makeFunctionReference<'query', { userId: string; limit?: number }, Array<any>>(
+export const notificationsListByUser = makeFunctionReference<'query', { paginationOpts: any }, any>(
   'notifications:listByUser',
 );
 export const notificationsCreate = makeFunctionReference<'mutation', {
@@ -188,7 +196,7 @@ export const notificationsCreate = makeFunctionReference<'mutation', {
 export const notificationsMarkRead = makeFunctionReference<'mutation', { notificationId: string }, void>(
   'notifications:markRead',
 );
-export const notificationsClearByUser = makeFunctionReference<'mutation', { userId: string }, void>(
+export const notificationsClearByUser = makeFunctionReference<'mutation', Record<string, never>, void>(
   'notifications:clearByUser',
 );
 
@@ -261,7 +269,6 @@ export const resourcesCreate = makeFunctionReference<'mutation', {
 }, string>('resources:createResource');
 export const resourcesDelete = makeFunctionReference<'mutation', { resourceId: string }, { ok: boolean }>('resources:deleteResource');
 export const rankingCastVote = makeFunctionReference<'mutation', {
-  voterUserId: string;
   winnerProfessorId: string;
   loserProfessorId: string;
   contextType: 'general' | 'subject' | 'cathedra';
@@ -276,8 +283,6 @@ export const supportListMine = makeFunctionReference<'query', Record<string, nev
 
 export const reviewsCreate = makeFunctionReference<'mutation', {
   requestId: string;
-  reviewerUserId: string;
-  targetUserId: string;
   rating: number;
   comment: string;
 }, string>('reviews:createReview');
@@ -293,6 +298,4 @@ export const reviewsListByTarget = makeFunctionReference<'query', {
   comment: string;
   createdAt: number;
 }>>('reviews:listByTarget');
-export const reviewsListByReviewer = makeFunctionReference<'query', {
-  reviewerUserId: string;
-}, Array<{ requestId: string; targetUserId: string; createdAt: number }>>('reviews:listByReviewer');
+export const reviewsListByReviewer = makeFunctionReference<'query', Record<string, never>, Array<{ requestId: string; targetUserId: string; createdAt: number }>>('reviews:listByReviewer');

@@ -101,7 +101,6 @@ export function ProfessorsProvider({ children }: { children: React.ReactNode }) 
         if (winnerId === loserId) return { ok: false, reason: 'No se puede votar por el mismo docente.' };
         try {
             await castVoteMutation({
-                voterUserId: user.id,
                 winnerProfessorId: winnerId,
                 loserProfessorId: loserId,
                 contextType: context.type === 'catedra' ? 'cathedra' : context.type,

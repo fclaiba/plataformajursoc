@@ -78,6 +78,16 @@ export function Login() {
                             />
                         </div>
 
+                        <div className="text-right">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/forgot-password')}
+                                className="text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                            >
+                                ¿Olvidaste tu contraseña?
+                            </button>
+                        </div>
+
                         {error && (
                             <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600 font-medium animate-in fade-in">
                                 {error}

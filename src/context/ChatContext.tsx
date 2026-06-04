@@ -78,7 +78,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         await sendMessageMutation({
             threadId,
             requestId,
-            senderUserId: user.id,
             content,
             type: file ? 'image' : 'text',
             mediaStorageId,
@@ -96,7 +95,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         if (!user || !activeThreadId) return;
         void markThreadMessagesAsRead({
             threadId: activeThreadId,
-            readerUserId: user.id,
         });
     }, [user, activeThreadId, markThreadMessagesAsRead]);
     const subscribeToRequest = useCallback((requestId: string) => {
@@ -119,7 +117,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             setActiveThreadId(threadId);
             void markThreadMessagesAsRead({
                 threadId,
-                readerUserId: user.id,
             });
         }).catch((error) => {
             console.error('[chat:get-or-create-thread]', error);

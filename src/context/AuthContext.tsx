@@ -178,7 +178,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         await addEnrollmentByExternal({
-            userId: user.id,
             subjectExternalId: materiaId,
             cathedraExternalId: catedraId,
             commissionExternalId: comisionId,
@@ -187,7 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const removeEnrollment = async (materiaId: string) => {
         if (!user) return;
-        await removeEnrollmentByExternal({ userId: user.id, subjectExternalId: materiaId });
+        await removeEnrollmentByExternal({ subjectExternalId: materiaId });
     };
 
     const toggleApproved = (materiaId: string) => {
@@ -237,9 +236,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const submitReview = async (targetUserId: string, rating: number, comment: string, requestId: string) => {
         if (!user) return;
         await createReview({
-            requestId,
-            reviewerUserId: user.id,
-            targetUserId,
+            requestId: requestId as any,
+            targetUserId: targetUserId as any,
             rating,
             comment,
         });

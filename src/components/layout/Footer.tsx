@@ -16,7 +16,13 @@ export function Footer() {
                     &copy; {new Date().getFullYear()} Plataforma JurSoc - Facultad de Ciencias Jurídicas y Sociales UNLP
                 </p>
 
-                <div className="flex items-center gap-4 self-center md:self-auto">
+                <div className="flex items-center gap-4 self-center md:self-auto flex-wrap justify-center">
+                    <a href="/terms" className="shrink-0 text-xs text-gray-400 hover:text-primary-600 transition-colors opacity-60 hover:opacity-100 whitespace-nowrap">
+                        Términos
+                    </a>
+                    <a href="/privacy" className="shrink-0 text-xs text-gray-400 hover:text-primary-600 transition-colors opacity-60 hover:opacity-100 whitespace-nowrap">
+                        Privacidad
+                    </a>
                     <button
                         onClick={resetTour}
                         className="shrink-0 flex items-center text-xs text-gray-400 hover:text-primary-600 transition-colors opacity-60 hover:opacity-100 whitespace-nowrap"

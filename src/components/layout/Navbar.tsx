@@ -1,17 +1,24 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { LogOut, Bell, Trophy, BookOpen, LayoutDashboard, ArrowRightLeft, Library, Network, Shield } from 'lucide-react';
+import { LogOut, Bell, Trophy, BookOpen, LayoutDashboard, ArrowRightLeft, Library, Network, Shield, Globe } from 'lucide-react';
 import { Button } from '../ui/button';
+import { ThemeToggle } from '../ui/ThemeToggle';
+import { useTranslation } from 'react-i18next';
 
 export function Navbar() {
     const { user, logout, isAuthenticated, isAdmin } = useAuth();
     const { unreadCount } = useNotifications();
     const navigate = useNavigate();
+    const { t, i18n } = useTranslation();
 
     const handleLogout = () => {
         logout();
         navigate('/login');
+    };
+
+    const toggleLanguage = () => {
+        i18n.changeLanguage(i18n.language === 'es' ? 'en' : 'es');
     };
 
     return (
@@ -32,23 +39,23 @@ export function Navbar() {
                     <div className="flex items-center space-x-4">
                         {isAuthenticated ? (
                             <>
-                                <Link to="/dashboard" id="tour-dashboard" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title="Dashboard">
+                                <Link to="/dashboard" id="tour-dashboard" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title={t('navbar.dashboard')}>
                                     <LayoutDashboard className="h-5 w-5" />
                                 </Link>
 
-                                <Link to="/mis-materias" id="tour-mis-materias" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title="Mis Materias">
+                                <Link to="/mis-materias" id="tour-mis-materias" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title={t('navbar.mis_materias')}>
                                     <Library className="h-5 w-5" />
                                 </Link>
 
-                                <Link to="/my-requests" id="tour-mis-solicitudes" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title="Mis Solicitudes">
+                                <Link to="/my-requests" id="tour-mis-solicitudes" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title={t('navbar.mis_solicitudes')}>
                                     <ArrowRightLeft className="h-5 w-5" />
                                 </Link>
 
-                                <Link to="/mapa-correlativas" id="tour-correlativas" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title="Mapa de Correlativas">
+                                <Link to="/mapa-correlativas" id="tour-correlativas" className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-all" title={t('navbar.mapa_correlativas')}>
                                     <Network className="h-5 w-5" />
                                 </Link>
 
-                                <Link to="/ranking/vote" id="tour-ranking" className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-full transition-all" title="Ranking Docente">
+                                <Link to="/ranking/vote" id="tour-ranking" className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-full transition-all" title={t('navbar.ranking_docente')}>
                                     <Trophy className="h-5 w-5" />
                                 </Link>
                                 {isAdmin && (
@@ -83,6 +90,17 @@ export function Navbar() {
                                             </div>
                                         </div>
                                     </Link>
+                                    <ThemeToggle />
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={toggleLanguage}
+                                        className="text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full w-9 h-9 p-0 flex-shrink-0"
+                                        title={i18n.language === 'es' ? 'English' : 'Español'}
+                                    >
+                                        <Globe className="h-4 w-4" />
+                                        <span className="sr-only">Toggle language</span>
+                                    </Button>
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -95,9 +113,9 @@ export function Navbar() {
                             </>
                         ) : (
                             <div className="flex items-center space-x-4 animate-in fade-in slide-in-from-right-5 duration-700">
-                                <Link to="/login" className="text-sm font-semibold text-gray-600 hover:text-primary-600 transition-colors">Ingresar</Link>
+                                <Link to="/login" className="text-sm font-semibold text-gray-600 hover:text-primary-600 transition-colors">{t('navbar.ingresar')}</Link>
                                 <Link to="/register">
-                                    <Button size="sm" className="shadow-lg shadow-primary-500/20">Registrarse</Button>
+                                    <Button size="sm" className="shadow-lg shadow-primary-500/20">{t('navbar.registrarse')}</Button>
                                 </Link>
                             </div>
                         )}

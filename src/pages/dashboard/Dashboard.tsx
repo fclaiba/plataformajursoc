@@ -1,14 +1,17 @@
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from 'convex/react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
-import { List, ArrowRightLeft, Search } from 'lucide-react';
+import { List, ArrowRightLeft, Search, Activity, CheckCircle, Clock, MessageSquare } from 'lucide-react';
 import { useCatalog } from '../../context/CatalogContext';
+import { requestsGetDashboardStats } from '../../convex/functions';
 
 export function Dashboard() {
     const { user } = useAuth();
     const { materias, catedras, comisiones } = useCatalog();
     const navigate = useNavigate();
+    const stats = useQuery(requestsGetDashboardStats, user?.id ? {} : "skip");
 
     const mySubjects = (user?.enrollments || []).map((enrollment) => {
         const materia = materias.find((subject) => subject.id === enrollment.materiaId);
@@ -16,6 +19,13 @@ export function Dashboard() {
         const comision = comisiones.find((commission) => commission.id === enrollment.comisionId);
         return { materia, catedra, comision };
     }).filter((entry) => entry.materia && entry.catedra && entry.comision);
+
+    const metrics = [
+        { label: 'Permutas activas', value: stats?.active ?? 0, icon: Activity, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
+        { label: 'Completadas', value: stats?.completed ?? 0, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+        { label: 'Confirmaciones pendientes', value: stats?.pendingConfirm ?? 0, icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
+        { label: 'Mensajes sin leer', value: stats?.unreadMessages ?? 0, icon: MessageSquare, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
+    ];
 
     return (
         <div className="space-y-6 sm:space-y-10 pb-28 sm:pb-32">
@@ -28,6 +38,27 @@ export function Dashboard() {
                     Gestiona tus inscripciones, busca nuevas oportunidades y organiza tu cursada de manera inteligente.
                 </p>
             </section>
+
+            {/* Metrics */}
+            {stats && (
+                <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-bottom-5 duration-700 delay-100">
+                    {metrics.map((m) => {
+                        const Icon = m.icon;
+                        return (
+                            <div
+                                key={m.label}
+                                className={`relative overflow-hidden rounded-2xl border ${m.border} ${m.bg} p-4 sm:p-5 transition-all duration-300 hover:shadow-md`}
+                            >
+                                <div className="flex items-center justify-between mb-2">
+                                    <Icon className={`w-5 h-5 ${m.color}`} />
+                                </div>
+                                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">{m.value}</div>
+                                <div className="text-xs sm:text-sm font-medium text-slate-500 mt-1">{m.label}</div>
+                            </div>
+                        );
+                    })}
+                </section>
+            )}
 
             {/* Quick Actions */}
             <section className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-5 duration-700 delay-150">

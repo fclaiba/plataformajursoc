@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { now, pairHash } from "./utils";
+import { now, pairHash, requireAuth } from "./utils";
 
 const K_FACTOR = 32;
 const DAILY_LIMIT = 120;
@@ -248,13 +248,13 @@ export const ensureProfessorsFromCatalog = mutation({
 
 export const castVote = mutation({
   args: {
-    voterUserId: v.id("users"),
     winnerProfessorId: v.id("professors"),
     loserProfessorId: v.id("professors"),
     contextType: v.union(v.literal("general"), v.literal("subject"), v.literal("cathedra")),
     contextId: v.string(),
   },
   handler: async (ctx, args) => {
+    const voterUserId = await requireAuth(ctx);
     if (args.winnerProfessorId === args.loserProfessorId) throw new Error("Invalid vote pair.");
 
     const hash = pairHash(String(args.winnerProfessorId), String(args.loserProfessorId));
@@ -263,7 +263,7 @@ export const castVote = mutation({
 
     const userVotes = await ctx.db
       .query("votes")
-      .withIndex("by_voter", (q) => q.eq("voterUserId", args.voterUserId))
+      .withIndex("by_voter", (q) => q.eq("voterUserId", voterUserId))
       .collect();
     const todayVotes = userVotes.filter((v) => v.createdAt >= todayStart.getTime());
     if (todayVotes.length >= DAILY_LIMIT) throw new Error("Daily voting limit reached.");
@@ -298,7 +298,7 @@ export const castVote = mutation({
     const nextLoserElo = Math.round(loserElo + K_FACTOR * (0 - expectedLoser));
 
     await ctx.db.insert("votes", {
-      voterUserId: args.voterUserId,
+      voterUserId,
       winnerProfessorId: args.winnerProfessorId,
       loserProfessorId: args.loserProfessorId,
       contextType: args.contextType,

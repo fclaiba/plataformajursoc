@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { now } from "./utils";
+import { now, requireAuth } from "./utils";
 import { CATEDRAS_INGRESANTES, COMISIONES_INGRESANTES, MATERIAS_INGRESANTES } from "../src/data/ingresantes2026";
 
 const syncCatalogData = async (
@@ -303,15 +303,15 @@ export const listEnrollmentsByUser = query({
 
 export const addEnrollment = mutation({
   args: {
-    userId: v.id("users"),
     subjectId: v.id("subjects"),
     cathedraId: v.id("cathedras"),
     commissionId: v.id("commissions"),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
     const existing = await ctx.db
       .query("enrollments")
-      .withIndex("by_user_subject", (q) => q.eq("userId", args.userId).eq("subjectId", args.subjectId))
+      .withIndex("by_user_subject", (q) => q.eq("userId", userId).eq("subjectId", args.subjectId))
       .first();
     if (existing) throw new Error("Already enrolled in this subject.");
 
@@ -320,6 +320,7 @@ export const addEnrollment = mutation({
 
     const enrollmentId = await ctx.db.insert("enrollments", {
       ...args,
+      userId,
       createdAt: now(),
       updatedAt: now(),
     });
@@ -335,12 +336,12 @@ export const addEnrollment = mutation({
 
 export const addEnrollmentByExternal = mutation({
   args: {
-    userId: v.id("users"),
     subjectExternalId: v.string(),
     cathedraExternalId: v.string(),
     commissionExternalId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
     const subject = await ctx.db
       .query("subjects")
       .withIndex("by_external", (q) => q.eq("externalId", args.subjectExternalId))
@@ -360,12 +361,12 @@ export const addEnrollmentByExternal = mutation({
 
     const existing = await ctx.db
       .query("enrollments")
-      .withIndex("by_user_subject", (q) => q.eq("userId", args.userId).eq("subjectId", subject._id))
+      .withIndex("by_user_subject", (q) => q.eq("userId", userId).eq("subjectId", subject._id))
       .first();
     if (existing) throw new Error("Already enrolled in this subject.");
 
     const enrollmentId = await ctx.db.insert("enrollments", {
-      userId: args.userId,
+      userId,
       subjectId: subject._id,
       cathedraId: cathedra._id,
       commissionId: commission._id,
@@ -401,10 +402,10 @@ export const removeEnrollment = mutation({
 
 export const removeEnrollmentByExternal = mutation({
   args: {
-    userId: v.id("users"),
     subjectExternalId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
     const subject = await ctx.db
       .query("subjects")
       .withIndex("by_external", (q) => q.eq("externalId", args.subjectExternalId))
@@ -413,7 +414,7 @@ export const removeEnrollmentByExternal = mutation({
 
     const enrollment = await ctx.db
       .query("enrollments")
-      .withIndex("by_user_subject", (q) => q.eq("userId", args.userId).eq("subjectId", subject._id))
+      .withIndex("by_user_subject", (q) => q.eq("userId", userId).eq("subjectId", subject._id))
       .first();
     if (!enrollment) return;
 

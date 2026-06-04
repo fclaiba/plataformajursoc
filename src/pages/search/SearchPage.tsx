@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useQuery } from 'convex/react';
 import { Button } from '../../components/ui/button';
 import { CommissionCard } from '../../components/dashboard/CommissionCard';
-import { Filter, X, Search as SearchIcon, SlidersHorizontal } from 'lucide-react';
+import { Filter, X, Search as SearchIcon, SlidersHorizontal, Flame } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Card } from '../../components/ui/card';
 import { useCatalog } from '../../context/CatalogContext';
+import { requestsCountActiveByCommission } from '../../convex/functions';
 
 export function SearchPage() {
     const { comisiones, materias, catedras } = useCatalog();
@@ -15,7 +17,21 @@ export function SearchPage() {
     const [selectedMateria, setSelectedMateria] = useState<string>(initialMateriaId || '');
     const [selectedCatedra, setSelectedCatedra] = useState<string>('');
     const [selectedTime, setSelectedTime] = useState<string>(''); // manana, tarde, noche
+    const [selectedDays, setSelectedDays] = useState<string[]>([]);
     const [showFilters, setShowFilters] = useState(false);
+
+    // Demand data — only fetch when a subject is selected
+    const demandData = useQuery(
+        requestsCountActiveByCommission,
+        selectedMateria ? { subjectExternalId: selectedMateria } : "skip"
+    );
+    const demandMap = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const entry of demandData ?? []) {
+            map.set(entry.commissionId, entry.count);
+        }
+        return map;
+    }, [demandData]);
 
     // Derived state for available options
     const availableCatedras = useMemo(() => {
@@ -48,13 +64,20 @@ export function SearchPage() {
             });
         }
 
+        if (selectedDays.length > 0) {
+            result = result.filter(c =>
+                c.horarios.some((h: any) => selectedDays.includes(h.dia))
+            );
+        }
+
         return result;
-    }, [selectedMateria, selectedCatedra, selectedTime, comisiones]);
+    }, [selectedMateria, selectedCatedra, selectedTime, selectedDays, comisiones]);
 
     const clearFilters = () => {
         setSelectedMateria('');
         setSelectedCatedra('');
         setSelectedTime('');
+        setSelectedDays([]);
     };
 
     return (
@@ -161,8 +184,38 @@ export function SearchPage() {
                                 </div>
                             </div>
 
+                            {/* Day filter */}
+                            <div>
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Día</h4>
+                                <div className="flex flex-wrap gap-2">
+                                    {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'].map((day) => (
+                                        <label
+                                            key={day}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer border transition-all",
+                                                selectedDays.includes(day)
+                                                    ? "bg-primary-100 border-primary-400 text-primary-700"
+                                                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50",
+                                            )}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="hidden"
+                                                checked={selectedDays.includes(day)}
+                                                onChange={() =>
+                                                    setSelectedDays((prev) =>
+                                                        prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+                                                    )
+                                                }
+                                            />
+                                            {day.slice(0, 3)}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
                             {/* Actions */}
-                            {(selectedMateria || selectedCatedra || selectedTime) && (
+                            {(selectedMateria || selectedCatedra || selectedTime || selectedDays.length > 0) && (
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -208,7 +261,15 @@ export function SearchPage() {
                                     onClick={() => { }} // Pass empty specific handler to rely on parent div or card behavior
                                     selected={false}
                                 />
-                                <div className="mt-2 text-right">
+                                <div className="mt-2 flex items-center justify-between">
+                                    {demandMap.get(comision.id) ? (
+                                        <span className="inline-flex items-center text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded-full">
+                                            <Flame className="w-3 h-3 mr-1" />
+                                            {demandMap.get(comision.id)} buscando
+                                        </span>
+                                    ) : (
+                                        <span />
+                                    )}
                                     <Button size="sm" variant="ghost" className="text-primary-600 p-0 h-auto font-semibold hover:bg-transparent hover:underline hover:text-primary-700">
                                         Solicitar Permuta &rarr;
                                     </Button>

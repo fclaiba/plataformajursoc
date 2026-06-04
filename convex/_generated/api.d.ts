@@ -19,6 +19,8 @@ import type * as matchingEngine from "../matchingEngine.js";
 import type * as matchingOrchestrator from "../matchingOrchestrator.js";
 import type * as notifications from "../notifications.js";
 import type * as ops from "../ops.js";
+import type * as push from "../push.js";
+import type * as pushAction from "../pushAction.js";
 import type * as ranking from "../ranking.js";
 import type * as requests from "../requests.js";
 import type * as requestsRules from "../requestsRules.js";
@@ -47,6 +49,8 @@ declare const fullApi: ApiFromModules<{
   matchingOrchestrator: typeof matchingOrchestrator;
   notifications: typeof notifications;
   ops: typeof ops;
+  push: typeof push;
+  pushAction: typeof pushAction;
   ranking: typeof ranking;
   requests: typeof requests;
   requestsRules: typeof requestsRules;

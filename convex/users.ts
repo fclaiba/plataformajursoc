@@ -16,10 +16,13 @@ const hasInteractionAccess = async (
     .collect();
 
   for (const request of viewerRequests) {
-    if (!request.matchedRequestId) continue;
-    const matchedRequest = await ctx.db.get(request.matchedRequestId);
-    if (matchedRequest && String(matchedRequest.userId) === String(targetUserId)) {
-      return true;
+    if (request.giveToRequestId) {
+      const g = await ctx.db.get(request.giveToRequestId);
+      if (g && String(g.userId) === String(targetUserId)) return true;
+    }
+    if (request.receiveFromRequestId) {
+      const r = await ctx.db.get(request.receiveFromRequestId);
+      if (r && String(r.userId) === String(targetUserId)) return true;
     }
   }
 

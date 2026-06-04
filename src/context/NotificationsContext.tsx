@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation, usePaginatedQuery } from 'convex/react';
 import { useAuth } from './AuthContext';
 import {
     notificationsClearByUser,
@@ -24,6 +24,8 @@ interface NotificationsContextType {
     markAsRead: (id: string) => void;
     clearAll: () => void;
     unreadCount: number;
+    loadMore: (numItems: number) => void;
+    status: "LoadingFirstPage" | "LoadingMore" | "CanLoadMore" | "Exhausted";
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
@@ -33,12 +35,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     const createNotificationMutation = useMutation(notificationsCreate);
     const markReadMutation = useMutation(notificationsMarkRead);
     const clearByUserMutation = useMutation(notificationsClearByUser);
-    const rows = useQuery(
+    const { results, status, loadMore } = usePaginatedQuery(
         notificationsListByUser,
-        user?.id ? { userId: user.id, limit: 100 } : "skip"
+        user?.id ? {} : "skip",
+        { initialNumItems: 10 }
     );
 
-    const notifications: Notification[] = (rows || []).map((row) => ({
+    const notifications: Notification[] = (results || []).map((row: any) => ({
         id: row._id,
         title: row.title,
         message: row.message,
@@ -70,13 +73,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     const clearAll = () => {
         if (!user?.id) return;
-        void clearByUserMutation({ userId: user.id });
+        void clearByUserMutation({});
     };
 
     const unreadCount = notifications.filter(n => !n.read).length;
 
     return (
-        <NotificationsContext.Provider value={{ notifications, addNotification, markAsRead, clearAll, unreadCount }}>
+        <NotificationsContext.Provider value={{ notifications, addNotification, markAsRead, clearAll, unreadCount, loadMore, status }}>
             {children}
         </NotificationsContext.Provider>
     );

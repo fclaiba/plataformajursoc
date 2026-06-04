@@ -49,7 +49,8 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
             })),
             status: row.status,
             createdAt: new Date(row.createdAt),
-            matchedRequestId: row.matchedRequestId,
+            giveToRequestId: row.giveToRequestId,
+            receiveFromRequestId: row.receiveFromRequestId,
             finalizedBy: row.finalizedBy,
         }));
     }, [rows]);
@@ -59,10 +60,10 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (!user?.id) return;
         for (const request of myRequests) {
-            if (request.status !== 'CONFIRMED' || !request.matchedRequestId) continue;
+            if (request.status !== 'CONFIRMED' || (!request.giveToRequestId && !request.receiveFromRequestId)) continue;
             if (autoClosingRequestsRef.current.has(request.id)) continue;
             autoClosingRequestsRef.current.add(request.id);
-            void completeRequestMutation({ requestId: request.id, actorUserId: user.id })
+            void completeRequestMutation({ requestId: request.id })
                 .catch((error) => {
                     const message = error instanceof Error ? error.message : 'No se pudo cerrar automáticamente la permuta.';
                     addNotification('Cierre automático pendiente', message, 'warning', 'requests');
@@ -103,7 +104,6 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
         }
 
         await createRequestMutation({
-            userId: user.id,
             subjectId: mapping.subjectId,
             commissionOriginId: originCommissionId,
             destinations,
@@ -115,7 +115,7 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
     const cancelRequest = async (requestId: string) => {
         if (!user?.id) return;
         try {
-            await cancelRequestMutation({ requestId, actorUserId: user.id });
+            await cancelRequestMutation({ requestId });
             addNotification('Solicitud cancelada', 'Tu pedido fue dado de baja y el matching se recalculará.', 'info', 'requests');
         } catch (error) {
             const message = error instanceof Error ? error.message : 'No se pudo cancelar la solicitud.';
@@ -130,7 +130,7 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
     const finalizeRequest = async (requestId: string) => {
         if (!user?.id) return;
         try {
-            await finalizeRequestMutation({ requestId, actorUserId: user.id });
+            await finalizeRequestMutation({ requestId });
             addNotification('Confirmación enviada', 'Tu confirmación fue registrada. El cierre se completa cuando ambos confirman.', 'success', 'requests');
         } catch (error) {
             const message = error instanceof Error ? error.message : 'No se pudo confirmar la solicitud.';

@@ -8,6 +8,7 @@ import { ChatProvider } from './context/ChatContext';
 import { TourProvider } from './context/TourContext';
 
 import { Layout } from './components/layout/Layout';
+import { RouteErrorBoundary } from './components/error/RouteErrorBoundary';
 import './App.css';
 
 // Protected Route Component
@@ -35,6 +36,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactElement }) => {
 
 import { NotificationsProvider } from './context/NotificationsContext';
 import { ProfessorsProvider } from './context/ProfessorsContext';
+import { AnalyticsProvider } from './context/AnalyticsContext';
 
 // ... (previous imports)
 
@@ -55,6 +57,11 @@ const EloTrainingPage = lazy(() => import('./pages/ranking/EloTrainingPage').the
 const LeaderboardPage = lazy(() => import('./pages/ranking/LeaderboardPage').then((m) => ({ default: m.LeaderboardPage })));
 const LandingPage = lazy(() => import('./pages/public/LandingPage').then((m) => ({ default: m.LandingPage })));
 const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })));
+const TermsPage = lazy(() => import('./pages/legal/TermsPage').then((m) => ({ default: m.TermsPage })));
+const PrivacyPage = lazy(() => import('./pages/legal/PrivacyPage').then((m) => ({ default: m.PrivacyPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
+const HistoryPage = lazy(() => import('./pages/requests/HistoryPage').then((m) => ({ default: m.HistoryPage })));
+const EditRequestPage = lazy(() => import('./pages/requests/EditRequestPage').then((m) => ({ default: m.EditRequestPage })));
 
 const AdminRoute = ({ children }: { children: React.ReactElement }) => {
   const { isAdmin } = useAuth();
@@ -74,7 +81,9 @@ function App() {
               <ProfessorsProvider>
                 <TourProvider>
                   <Router>
-                    <AppContent />
+                    <AnalyticsProvider> {/* AnalyticsProvider wraps AppContent */}
+                      <AppContent />
+                    </AnalyticsProvider>
                   </Router>
                 </TourProvider>
               </ProfessorsProvider>
@@ -98,78 +107,123 @@ function AppContent() {
 
           <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
           <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
+          <Route path="/forgot-password" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />} />
 
           {/* Protected Routes */}
           <Route path="/dashboard" element={
             <ProtectedRoute>
-              <Dashboard />
+              <RouteErrorBoundary section="el Dashboard">
+                <Dashboard />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="/search" element={
             <ProtectedRoute>
-              <SearchPage />
+              <RouteErrorBoundary section="la Búsqueda">
+                <SearchPage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="/requests/new" element={
             <ProtectedRoute>
-              <CreateRequestPage />
+              <RouteErrorBoundary section="Nueva Solicitud">
+                <CreateRequestPage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="/my-requests" element={
             <ProtectedRoute>
-              <MyRequestsPage />
+              <RouteErrorBoundary section="Mis Solicitudes">
+                <MyRequestsPage />
+              </RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/requests/edit/:requestId" element={
+            <ProtectedRoute>
+              <RouteErrorBoundary section="Editar Solicitud">
+                <EditRequestPage />
+              </RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/history" element={
+            <ProtectedRoute>
+              <RouteErrorBoundary section="el Historial">
+                <HistoryPage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="/mis-materias" element={
             <ProtectedRoute>
-              <MySubjectsPage />
+              <RouteErrorBoundary section="Mis Materias">
+                <MySubjectsPage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="/mapa-correlativas" element={
             <ProtectedRoute>
-              <CorrelativesMapPage />
+              <RouteErrorBoundary section="el Mapa de Correlativas">
+                <CorrelativesMapPage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="/notifications" element={
             <ProtectedRoute>
-              <NotificationsPage />
+              <RouteErrorBoundary section="las Notificaciones">
+                <NotificationsPage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="/profile" element={
             <ProtectedRoute>
-              <ProfilePage />
+              <RouteErrorBoundary section="el Perfil">
+                <ProfilePage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
           <Route path="/users/:userId" element={
             <ProtectedRoute>
-              <ProfilePage />
+              <RouteErrorBoundary section="el Perfil">
+                <ProfilePage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="/ranking/vote" element={
             <ProtectedRoute>
-              <EloTrainingPage />
+              <RouteErrorBoundary section="la Votación">
+                <EloTrainingPage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
           <Route path="/ranking/leaderboard" element={
             <ProtectedRoute>
-              <LeaderboardPage />
+              <RouteErrorBoundary section="el Leaderboard">
+                <LeaderboardPage />
+              </RouteErrorBoundary>
             </ProtectedRoute>
           } />
           <Route path="/admin" element={
             <ProtectedRoute>
               <AdminRoute>
-                <AdminDashboardPage />
+                <RouteErrorBoundary section="el Panel de Administración">
+                  <AdminDashboardPage />
+                </RouteErrorBoundary>
               </AdminRoute>
             </ProtectedRoute>
           } />
+
+          {/* Public Legal Routes */}
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
 
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/" replace />} />

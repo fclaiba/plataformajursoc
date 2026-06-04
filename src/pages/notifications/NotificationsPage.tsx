@@ -1,11 +1,13 @@
 import { useNotifications } from '../../context/NotificationsContext';
 import { Card, CardContent } from '../../components/ui/card';
-import { Bell, CheckCircle, Info, AlertTriangle, XCircle, Trash2 } from 'lucide-react';
+import { Bell, CheckCircle, Info, AlertTriangle, XCircle, Trash2, Smartphone } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
 
 export function NotificationsPage() {
     const { notifications, markAsRead, clearAll } = useNotifications();
+    const { isSupported, isSubscribed, permission, subscribe, unsubscribe, isReady } = usePushNotifications();
 
     const getIcon = (type: string) => {
         switch (type) {
@@ -29,6 +31,30 @@ export function NotificationsPage() {
                     {notifications.filter(n => !n.read).length} nuevas
                 </div>
             </div>
+
+            {isSupported && isReady && permission !== 'denied' && (
+                <div className="bg-primary-50 border border-primary-200 rounded-2xl p-4 flex items-center justify-between shadow-sm animate-in fade-in">
+                    <div className="flex items-center space-x-4">
+                        <div className="bg-white p-2 rounded-xl text-primary-600 shadow-sm">
+                            <Smartphone className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-800 text-sm">Notificaciones Push</h3>
+                            <p className="text-xs text-slate-600">
+                                {isSubscribed ? 'Recibís alertas en tu dispositivo.' : 'Activá las alertas para enterarte al instante de nuevos matches.'}
+                            </p>
+                        </div>
+                    </div>
+                    <Button 
+                        variant={isSubscribed ? "outline" : "primary"} 
+                        size="sm" 
+                        onClick={isSubscribed ? unsubscribe : subscribe}
+                        className={cn("whitespace-nowrap ml-4", isSubscribed ? "border-primary-200 text-primary-700 bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200" : "shadow-md shadow-primary-500/20")}
+                    >
+                        {isSubscribed ? 'Desactivar' : 'Activar'}
+                    </Button>
+                </div>
+            )}
 
             <div className="space-y-4">
                 {notifications.length === 0 ? (

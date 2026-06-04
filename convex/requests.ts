@@ -1,13 +1,15 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
-import { now } from "./utils";
+import { now, requireAuth, rateLimit } from "./utils";
 import {
   areReciprocallyMatched,
   canBeCompleted,
   shouldAutoCompleteAfterDoubleFinalize,
 } from "./requestsRules";
 import { writeOperationalLog } from "./ops";
+import { insertNotification } from "./notifications";
 
 const removeEnrollmentForCompletedRequest = async (
   ctx: any,
@@ -42,6 +44,81 @@ export const listByUser = query({
   },
 });
 
+export const getDashboardStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
+    const myRequests = await ctx.db
+      .query("requests")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const active = myRequests.filter(
+      (r) => r.status === "PENDING" || r.status === "MATCHED",
+    ).length;
+    const completed = myRequests.filter((r) => r.status === "COMPLETED").length;
+    const pendingConfirm = myRequests.filter(
+      (r) =>
+        r.status === "MATCHED" &&
+        r.giveToRequestId &&
+        !r.finalizedBy?.includes(userId),
+    ).length;
+
+    // Unread messages: count messages where the user is receiver and readAt is not set
+    let unreadMessages = 0;
+    const matchedRequests = myRequests.filter((r) => r.giveToRequestId || r.receiveFromRequestId);
+    for (const req of matchedRequests) {
+      const threads = await ctx.db
+        .query("threads")
+        .withIndex("by_request", (q) => q.eq("requestId", req._id))
+        .collect();
+      for (const thread of threads) {
+        const messages = await ctx.db
+          .query("messages")
+          .withIndex("by_thread", (q) => q.eq("threadId", thread._id))
+          .collect();
+        unreadMessages += messages.filter(
+          (m) => m.senderUserId !== userId && !m.readAt,
+        ).length;
+      }
+    }
+
+    return { active, completed, pendingConfirm, unreadMessages };
+  },
+});
+
+export const countActiveByCommission = query({
+  args: { subjectExternalId: v.string() },
+  handler: async (ctx, args) => {
+    const subject = await ctx.db
+      .query("subjects")
+      .withIndex("by_external", (q) => q.eq("externalId", args.subjectExternalId))
+      .first();
+    if (!subject) return [];
+
+    const pending = await ctx.db
+      .query("requests")
+      .withIndex("by_subject_status", (q) =>
+        q.eq("subjectId", subject._id).eq("status", "PENDING"),
+      )
+      .collect();
+
+    const countByCommission = new Map<string, number>();
+    for (const req of pending) {
+      for (const dest of req.destinations) {
+        const commission = await ctx.db.get(dest.commissionId);
+        const key = commission?.externalId ?? String(dest.commissionId);
+        countByCommission.set(key, (countByCommission.get(key) ?? 0) + 1);
+      }
+    }
+
+    return Array.from(countByCommission.entries()).map(([commissionId, count]) => ({
+      commissionId,
+      count,
+    }));
+  },
+});
+
 export const listVisibleByUser = query({
   args: { userId: v.id("users"), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -57,10 +134,14 @@ export const listVisibleByUser = query({
     }
 
     for (const request of mine) {
-      if (!request.matchedRequestId) continue;
-      const matched = await ctx.db.get(request.matchedRequestId);
-      if (!matched) continue;
-      byId.set(String(matched._id), matched);
+      if (request.giveToRequestId) {
+        const giveTo = await ctx.db.get(request.giveToRequestId);
+        if (giveTo) byId.set(String(giveTo._id), giveTo);
+      }
+      if (request.receiveFromRequestId && request.receiveFromRequestId !== request.giveToRequestId) {
+        const receiveFrom = await ctx.db.get(request.receiveFromRequestId);
+        if (receiveFrom) byId.set(String(receiveFrom._id), receiveFrom);
+      }
     }
 
     const sorted = Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
@@ -91,7 +172,6 @@ export const listVisibleByUser = query({
 
 export const createRequest = mutation({
   args: {
-    userId: v.id("users"),
     subjectId: v.id("subjects"),
     commissionOriginId: v.id("commissions"),
     destinations: v.array(
@@ -102,8 +182,11 @@ export const createRequest = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    await rateLimit(ctx, "createRequest", userId, 60_000, 5);
     const requestId = await ctx.db.insert("requests", {
       ...args,
+      userId,
       status: "PENDING",
       finalizedBy: [],
       createdAt: now(),
@@ -111,13 +194,13 @@ export const createRequest = mutation({
     });
     await ctx.db.insert("requestEvents", {
       requestId,
-      actorUserId: args.userId,
+      actorUserId: userId,
       type: "REQUEST_CREATED",
       createdAt: now(),
     });
     await ctx.db.insert("requestEvents", {
       requestId,
-      actorUserId: args.userId,
+      actorUserId: userId,
       type: "MATCH_RECOMPUTE_SCHEDULED",
       payload: { reason: "request_created", subjectId: args.subjectId },
       createdAt: now(),
@@ -130,19 +213,65 @@ export const createRequest = mutation({
       domain: "requests",
       level: "info",
       message: "Request created and matching scheduled.",
-      actorUserId: args.userId,
+      actorUserId: userId,
       metadata: { requestId, subjectId: args.subjectId },
     });
     return requestId;
   },
 });
 
+export const editRequest = mutation({
+  args: {
+    requestId: v.id("requests"),
+    destinations: v.array(
+      v.object({
+        commissionId: v.id("commissions"),
+        priority: v.number(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    await rateLimit(ctx, "editRequest", userId, 60_000, 10);
+    const request = await ctx.db.get(args.requestId);
+    if (!request) throw new Error("Solicitud no encontrada.");
+    if (request.userId !== userId) throw new Error("No tenés permiso para editar esta solicitud.");
+    if (request.status !== "PENDING") {
+      throw new Error("Solo se pueden editar solicitudes en estado PENDIENTE.");
+    }
+    if (args.destinations.length === 0) {
+      throw new Error("Debe haber al menos un destino.");
+    }
+
+    await ctx.db.patch(request._id, {
+      destinations: args.destinations,
+      updatedAt: now(),
+    });
+
+    await ctx.db.insert("requestEvents", {
+      requestId: request._id,
+      actorUserId: userId,
+      type: "REQUEST_EDITED",
+      payload: { newDestinations: args.destinations.length },
+      createdAt: now(),
+    });
+
+    // Re-trigger matching with updated destinations
+    await ctx.runMutation(api.matchingOrchestrator.enqueueSubjectMatching, {
+      subjectId: request.subjectId,
+      reason: "request_edited",
+    });
+
+    return request._id;
+  },
+});
+
 export const cancelRequest = mutation({
   args: {
     requestId: v.id("requests"),
-    actorUserId: v.id("users"),
   },
   handler: async (ctx, args) => {
+    const actorUserId = await requireAuth(ctx);
     const request = await ctx.db.get(args.requestId);
     if (!request) return;
     if (request.status === "CANCELLED" || request.status === "COMPLETED") return;
@@ -150,66 +279,63 @@ export const cancelRequest = mutation({
       throw new Error("No se puede cancelar una solicitud ya confirmada.");
     }
 
-    let counterpartId = request.matchedRequestId;
-    if (counterpartId) {
+    const counterpartIds = new Set<Id<"requests">>();
+    if (request.giveToRequestId) counterpartIds.add(request.giveToRequestId);
+    if (request.receiveFromRequestId) counterpartIds.add(request.receiveFromRequestId);
+
+    for (const counterpartId of counterpartIds) {
       const counterpart = await ctx.db.get(counterpartId);
-      if (counterpart && areReciprocallyMatched({
-        _id: String(request._id),
-        status: request.status,
-        matchedRequestId: request.matchedRequestId ? String(request.matchedRequestId) : undefined,
-      }, {
-        _id: String(counterpart._id),
-        status: counterpart.status,
-        matchedRequestId: counterpart.matchedRequestId ? String(counterpart.matchedRequestId) : undefined,
-      })) {
-        if (counterpart.status === "MATCHED" || counterpart.status === "CONFIRMED") {
-          await ctx.db.patch(counterpart._id, {
-            status: "PENDING",
-            matchedRequestId: undefined,
-            finalizedBy: [],
-            updatedAt: now(),
-          });
-          await ctx.db.insert("requestEvents", {
-            requestId: counterpart._id,
-            actorUserId: args.actorUserId,
-            type: "MATCH_RELEASED_ON_CANCEL",
-            payload: { cancelledRequestId: request._id },
-            createdAt: now(),
-          });
-        }
-      } else {
-        counterpartId = undefined;
+      if (counterpart && (counterpart.status === "MATCHED" || counterpart.status === "CONFIRMED")) {
+        await ctx.db.patch(counterpart._id, {
+          status: "PENDING",
+          giveToRequestId: undefined,
+          receiveFromRequestId: undefined,
+          finalizedBy: [],
+          updatedAt: now(),
+        });
+        await ctx.db.insert("requestEvents", {
+          requestId: counterpart._id,
+          actorUserId,
+          type: "MATCH_RELEASED_ON_CANCEL",
+          payload: { cancelledRequestId: request._id },
+          createdAt: now(),
+        });
       }
     }
 
     await ctx.db.patch(args.requestId, {
       status: "CANCELLED",
-      matchedRequestId: undefined,
+      giveToRequestId: undefined,
+      receiveFromRequestId: undefined,
       finalizedBy: [],
       updatedAt: now(),
     });
+
     await ctx.db.insert("requestEvents", {
       requestId: args.requestId,
-      actorUserId: args.actorUserId,
+      actorUserId,
       type: "REQUEST_CANCELLED",
       createdAt: now(),
     });
+    
     await ctx.db.insert("requestEvents", {
       requestId: args.requestId,
-      actorUserId: args.actorUserId,
+      actorUserId,
       type: "MATCH_RECOMPUTE_SCHEDULED",
-      payload: { reason: "request_cancelled", subjectId: request.subjectId, releasedCounterpart: counterpartId },
+      payload: { reason: "request_cancelled", subjectId: request.subjectId, releasedCounterparts: Array.from(counterpartIds) },
       createdAt: now(),
     });
+    
     await ctx.runMutation(api.matchingOrchestrator.enqueueSubjectMatching, {
       subjectId: request.subjectId,
       reason: "request_cancelled",
     });
+    
     await writeOperationalLog(ctx, {
       domain: "requests",
       level: "warning",
       message: "Request cancelled and matching rescheduled.",
-      actorUserId: args.actorUserId,
+      actorUserId,
       metadata: { requestId: args.requestId, subjectId: request.subjectId },
     });
   },
@@ -218,192 +344,128 @@ export const cancelRequest = mutation({
 export const finalizeRequest = mutation({
   args: {
     requestId: v.id("requests"),
-    actorUserId: v.id("users"),
   },
   handler: async (ctx, args) => {
+    const actorUserId = await requireAuth(ctx);
     const request = await ctx.db.get(args.requestId);
-    if (!request || !request.matchedRequestId) return;
-    if (request.userId !== args.actorUserId) {
+    if (!request) return;
+    if (request.userId !== actorUserId) {
       throw new Error("Solo el dueño de la solicitud puede confirmarla.");
     }
-    const matched = await ctx.db.get(request.matchedRequestId);
-    if (!matched) return;
-    if (request.status === "COMPLETED" && matched.status === "COMPLETED") return;
-    if (
-      !areReciprocallyMatched(
-        {
-          _id: String(request._id),
-          status: request.status,
-          matchedRequestId: request.matchedRequestId ? String(request.matchedRequestId) : undefined,
-        },
-        {
-          _id: String(matched._id),
-          status: matched.status,
-          matchedRequestId: matched.matchedRequestId ? String(matched.matchedRequestId) : undefined,
-        },
-      )
-    ) {
-      throw new Error("La relación de match es inconsistente.");
-    }
-    if (
-      request.status !== "MATCHED" &&
-      request.status !== "CONFIRMED" &&
-      request.status !== "COMPLETED"
-    ) {
-      throw new Error("La solicitud no está en estado confirmable.");
-    }
-    if (
-      matched.status !== "MATCHED" &&
-      matched.status !== "CONFIRMED" &&
-      matched.status !== "COMPLETED"
-    ) {
-      throw new Error("La contraparte no está en estado confirmable.");
+
+    const counterpartIds = new Set<Id<"requests">>();
+    if (request.giveToRequestId) counterpartIds.add(request.giveToRequestId);
+    if (request.receiveFromRequestId) counterpartIds.add(request.receiveFromRequestId);
+    
+    if (counterpartIds.size === 0) return;
+
+    const group = [request];
+    for (const gid of counterpartIds) {
+      const req = await ctx.db.get(gid);
+      if (req) group.push(req);
     }
 
-    const finalizedBy = Array.from(new Set([...request.finalizedBy, args.actorUserId]));
-    await ctx.db.patch(request._id, {
-      finalizedBy,
-      updatedAt: now(),
-    });
-    const latestRequest = await ctx.db.get(request._id);
-    const latestMatched = await ctx.db.get(matched._id);
-    if (!latestRequest || !latestMatched) return;
-    const shouldAutoComplete = shouldAutoCompleteAfterDoubleFinalize(
-      {
-        _id: String(latestRequest._id),
-        userId: String(latestRequest.userId),
-        status: latestRequest.status,
-        matchedRequestId: latestRequest.matchedRequestId ? String(latestRequest.matchedRequestId) : undefined,
-        finalizedBy: latestRequest.finalizedBy.map(String),
-      },
-      {
-        _id: String(latestMatched._id),
-        userId: String(latestMatched.userId),
-        status: latestMatched.status,
-        matchedRequestId: latestMatched.matchedRequestId ? String(latestMatched.matchedRequestId) : undefined,
-        finalizedBy: latestMatched.finalizedBy.map(String),
-      },
-    );
-    if (!shouldAutoComplete) return;
-    if (latestRequest.status === "COMPLETED" && latestMatched.status === "COMPLETED") return;
+    const unconfirmable = group.find(r => r.status !== "MATCHED" && r.status !== "CONFIRMED" && r.status !== "COMPLETED");
+    if (unconfirmable) {
+       throw new Error("Una o más partes del intercambio no están en estado confirmable.");
+    }
 
-    await ctx.db.patch(request._id, { status: "COMPLETED", updatedAt: now() });
-    await ctx.db.patch(matched._id, { status: "COMPLETED", updatedAt: now() });
-    await ctx.db.insert("requestEvents", {
-      requestId: request._id,
-      actorUserId: args.actorUserId,
-      type: "REQUEST_CONFIRMED",
-      createdAt: now(),
-    });
-    await ctx.db.insert("requestEvents", {
-      requestId: matched._id,
-      actorUserId: args.actorUserId,
-      type: "REQUEST_CONFIRMED",
-      createdAt: now(),
-    });
-    await ctx.db.insert("requestEvents", {
-      requestId: request._id,
-      actorUserId: args.actorUserId,
-      type: "REQUEST_COMPLETED",
-      createdAt: now(),
-    });
-    await ctx.db.insert("requestEvents", {
-      requestId: matched._id,
-      actorUserId: args.actorUserId,
-      type: "REQUEST_COMPLETED",
-      createdAt: now(),
-    });
-    const removedCurrent = await removeEnrollmentForCompletedRequest(ctx, {
-      userId: request.userId,
-      subjectId: request.subjectId,
-    });
-    const removedMatched = await removeEnrollmentForCompletedRequest(ctx, {
-      userId: matched.userId,
-      subjectId: matched.subjectId,
-    });
+    const allUserIds = group.map(g => g.userId);
+    
+    // Add this user to everyone's finalizedBy list
+    for (const req of group) {
+      const finalizedBy = Array.from(new Set([...req.finalizedBy, actorUserId]));
+      await ctx.db.patch(req._id, { finalizedBy, updatedAt: now() });
+      if (req.status === "MATCHED") {
+        await ctx.db.patch(req._id, { status: "CONFIRMED" });
+      }
+    }
+
+    // Check if everyone has finalized
+    let allFinalized = true;
+    for (const req of group) {
+      const latest = await ctx.db.get(req._id);
+      if (!latest) continue;
+      for (const uid of allUserIds) {
+        if (!latest.finalizedBy.includes(uid)) {
+          allFinalized = false;
+        }
+      }
+    }
+
+    if (!allFinalized) return;
+    
+    // Auto-complete
+    for (const req of group) {
+      const latest = await ctx.db.get(req._id);
+      if (latest && latest.status !== "COMPLETED") {
+        await ctx.db.patch(req._id, { status: "COMPLETED", updatedAt: now() });
+        await ctx.db.insert("requestEvents", { requestId: req._id, actorUserId, type: "REQUEST_CONFIRMED", createdAt: now() });
+        await ctx.db.insert("requestEvents", { requestId: req._id, actorUserId, type: "REQUEST_COMPLETED", createdAt: now() });
+        const removed = await removeEnrollmentForCompletedRequest(ctx, { userId: req.userId, subjectId: req.subjectId });
+      }
+    }
+
     await writeOperationalLog(ctx, {
       domain: "requests",
       level: "info",
       message: "Exchange completed and enrollments cleared from my subjects.",
-      actorUserId: args.actorUserId,
-      metadata: {
-        requestId: request._id,
-        matchedRequestId: matched._id,
-        subjectId: request.subjectId,
-        removedCurrent,
-        removedMatched,
-      },
+      actorUserId,
+      metadata: { requestId: request._id, autoCompleted: true },
     });
+
+    for (const uid of new Set(allUserIds)) {
+      await insertNotification(ctx, {
+        userId: uid,
+        title: "¡Permuta completada!",
+        message: "Tu intercambio fue completado exitosamente. Ya podés dejar una reseña.",
+        type: "success",
+        source: "requests",
+      });
+    }
   },
 });
 
 export const completeExchange = mutation({
   args: {
     requestId: v.id("requests"),
-    actorUserId: v.id("users"),
   },
   handler: async (ctx, args) => {
+    const actorUserId = await requireAuth(ctx);
+    // similar logic to finalize but forced.
     const request = await ctx.db.get(args.requestId);
     if (!request) return;
-    if (request.status === "COMPLETED") return;
-    if (!request.matchedRequestId) {
-      throw new Error("La solicitud no tiene contraparte matcheada.");
+    
+    const counterpartIds = new Set<Id<"requests">>();
+    if (request.giveToRequestId) counterpartIds.add(request.giveToRequestId);
+    if (request.receiveFromRequestId) counterpartIds.add(request.receiveFromRequestId);
+    
+    if (counterpartIds.size === 0) throw new Error("La solicitud no tiene contraparte.");
+
+    const group = [request];
+    for (const gid of counterpartIds) {
+      const req = await ctx.db.get(gid);
+      if (req) group.push(req);
     }
-    const matched = await ctx.db.get(request.matchedRequestId);
-    if (!matched) {
-      throw new Error("La contraparte de la solicitud no existe.");
+
+    for (const req of group) {
+      if (req.status !== "COMPLETED") {
+        await ctx.db.patch(req._id, { status: "COMPLETED", updatedAt: now() });
+        await ctx.db.insert("requestEvents", { requestId: req._id, actorUserId, type: "REQUEST_COMPLETED", createdAt: now() });
+        await removeEnrollmentForCompletedRequest(ctx, { userId: req.userId, subjectId: req.subjectId });
+      }
     }
-    if (matched.status === "COMPLETED") return;
-    if (
-      !canBeCompleted(
-        {
-          _id: String(request._id),
-          status: request.status,
-          matchedRequestId: request.matchedRequestId ? String(request.matchedRequestId) : undefined,
-        },
-        {
-          _id: String(matched._id),
-          status: matched.status,
-          matchedRequestId: matched.matchedRequestId ? String(matched.matchedRequestId) : undefined,
-        },
-      )
-    ) {
-      throw new Error("El cierre es automático cuando ambas partes confirman la permuta.");
+
+    // notifications
+    const allUserIds = group.map(g => g.userId);
+    for (const uid of new Set(allUserIds)) {
+      await insertNotification(ctx, {
+        userId: uid,
+        title: "¡Permuta completada!",
+        message: "Tu intercambio fue completado manualmente. Ya podés dejar una reseña.",
+        type: "success",
+        source: "requests",
+      });
     }
-    await ctx.db.patch(args.requestId, { status: "COMPLETED", updatedAt: now() });
-    await ctx.db.patch(request.matchedRequestId, { status: "COMPLETED", updatedAt: now() });
-    await ctx.db.insert("requestEvents", {
-      requestId: args.requestId,
-      actorUserId: args.actorUserId,
-      type: "REQUEST_COMPLETED",
-      createdAt: now(),
-    });
-    await ctx.db.insert("requestEvents", {
-      requestId: request.matchedRequestId,
-      actorUserId: args.actorUserId,
-      type: "REQUEST_COMPLETED",
-      createdAt: now(),
-    });
-    const removedCurrent = await removeEnrollmentForCompletedRequest(ctx, {
-      userId: request.userId,
-      subjectId: request.subjectId,
-    });
-    const removedMatched = await removeEnrollmentForCompletedRequest(ctx, {
-      userId: matched.userId,
-      subjectId: matched.subjectId,
-    });
-    await writeOperationalLog(ctx, {
-      domain: "requests",
-      level: "info",
-      message: "Manual completion cleared enrollments from my subjects.",
-      actorUserId: args.actorUserId,
-      metadata: {
-        requestId: request._id,
-        matchedRequestId: matched._id,
-        subjectId: request.subjectId,
-        removedCurrent,
-        removedMatched,
-      },
-    });
   },
 });

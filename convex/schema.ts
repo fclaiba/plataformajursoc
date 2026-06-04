@@ -89,7 +89,8 @@ export default defineSchema({
       v.literal("COMPLETED"),
       v.literal("CANCELLED"),
     ),
-    matchedRequestId: v.optional(v.id("requests")),
+    giveToRequestId: v.optional(v.id("requests")),
+    receiveFromRequestId: v.optional(v.id("requests")),
     finalizedBy: v.array(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -230,4 +231,19 @@ export default defineSchema({
     wins: v.number(),
     updatedAt: v.number(),
   }).index("by_context", ["contextType", "contextId"]),
+
+  rateLimits: defineTable({
+    key: v.string(),       // e.g. "createRequest:<userId>"
+    hits: v.number(),
+    windowStart: v.number(),
+  }).index("by_key", ["key"]),
+
+  pushSubscriptions: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
 });
