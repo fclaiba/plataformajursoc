@@ -71,7 +71,6 @@ export const unsubscribe = mutation({
 
 
 import { internalQuery, internalMutation } from "./_generated/server";
-import { api } from "./_generated/api";
 
 export const getSubscriptions = internalQuery({
   args: { userId: v.id("users") },

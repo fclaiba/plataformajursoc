@@ -27,7 +27,7 @@ const better = (a: SolveResult, b: SolveResult) => {
   return a.totalScore < b.totalScore;
 };
 
-const greedyFallback = (nodes: string[], edges: CandidateEdge[], triplets: CandidateTriplet[]): SolveResult => {
+const greedyFallback = (_nodes: string[], edges: CandidateEdge[], triplets: CandidateTriplet[]): SolveResult => {
   const used = new Set<string>();
   const matches: MatchResult[] = [];
   let totalScore = 0;

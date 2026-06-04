@@ -283,6 +283,7 @@ export const supportListMine = makeFunctionReference<'query', Record<string, nev
 
 export const reviewsCreate = makeFunctionReference<'mutation', {
   requestId: string;
+  targetUserId: string;
   rating: number;
   comment: string;
 }, string>('reviews:createReview');

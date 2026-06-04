@@ -84,5 +84,6 @@ export interface ExchangeRequest {
     chatId?: string; // Link to conversation
     giveToRequestId?: string; // Request ID taking this spot
     receiveFromRequestId?: string; // Request ID giving this spot
+    matchedRequestId?: string; // Matching requests ID
     finalizedBy?: string[]; // User IDs who finalized
 }

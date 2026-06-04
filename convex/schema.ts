@@ -89,6 +89,7 @@ export default defineSchema({
       v.literal("COMPLETED"),
       v.literal("CANCELLED"),
     ),
+    matchedRequestId: v.optional(v.id("requests")),
     giveToRequestId: v.optional(v.id("requests")),
     receiveFromRequestId: v.optional(v.id("requests")),
     finalizedBy: v.array(v.id("users")),

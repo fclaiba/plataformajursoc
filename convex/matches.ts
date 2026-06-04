@@ -1,7 +1,7 @@
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { now } from "./utils";
-import { selectBestMatches, CandidateEdge, CandidateTriplet, MatchResult } from "./matchingEngine";
+import { selectBestMatches, type CandidateEdge, type CandidateTriplet } from "./matchingEngine";
 import { insertNotification } from "./notifications";
 
 const preferenceRank = (

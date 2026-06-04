@@ -1,7 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { now, requireAuth, rateLimit } from "./utils";
-import { areReciprocallyMatched } from "./requestsRules";
 import { insertNotification } from "./notifications";
 
 export const createReview = mutation({

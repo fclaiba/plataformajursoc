@@ -3,11 +3,6 @@ import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
 import { now, requireAuth, rateLimit } from "./utils";
-import {
-  areReciprocallyMatched,
-  canBeCompleted,
-  shouldAutoCompleteAfterDoubleFinalize,
-} from "./requestsRules";
 import { writeOperationalLog } from "./ops";
 import { insertNotification } from "./notifications";
 
@@ -402,7 +397,7 @@ export const finalizeRequest = mutation({
         await ctx.db.patch(req._id, { status: "COMPLETED", updatedAt: now() });
         await ctx.db.insert("requestEvents", { requestId: req._id, actorUserId, type: "REQUEST_CONFIRMED", createdAt: now() });
         await ctx.db.insert("requestEvents", { requestId: req._id, actorUserId, type: "REQUEST_COMPLETED", createdAt: now() });
-        const removed = await removeEnrollmentForCompletedRequest(ctx, { userId: req.userId, subjectId: req.subjectId });
+        await removeEnrollmentForCompletedRequest(ctx, { userId: req.userId, subjectId: req.subjectId });
       }
     }
 
